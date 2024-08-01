@@ -1,10 +1,7 @@
 import app from "./app.js";
-import dotenv from "dotenv";
-import { prisma } from "./src/db/index.js"
-
-dotenv.config({
-  path: '.env'
-});
+ 
+ 
+ 
 app.get("/", (req, res) => {
   const html = `
     <!DOCTYPE html>
