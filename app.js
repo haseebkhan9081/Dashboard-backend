@@ -230,5 +230,124 @@ app.get('/api/analytics/Studentsvsboxes', async (req, res) => {
   }
 });
 
- 
+app.get('/api/analytics/expenses', async (req, res) => {
+    const { quotationSheet, expensesWorkSheet } = req.query;
+  
+    if (!quotationSheet || !expensesWorkSheet) {
+      return res.status(400).json({ error: 'All sheet and worksheet IDs are required' });
+    }
+  
+    try {
+      // Load the quotation sheet
+      const quotationDoc = new GoogleSpreadsheet(quotationSheet, serviceAccountAuth);
+      await quotationDoc.loadInfo();
+  
+      // Load the expenses sheet
+      const expensesSheetDoc = quotationDoc.sheetsById[expensesWorkSheet];
+      if (!expensesSheetDoc) {
+        return res.status(404).json({ error: 'Expenses worksheet not found' });
+      }
+      const expensesRows = await expensesSheetDoc.getRows();
+  
+      // Extract headers and convert rows to JSON for all sheets
+      const extractData = (sheet, rows) => {
+        const headers = sheet.headerValues;
+        return rows.map(row => {
+          const rowData = {};
+          headers.forEach((header, index) => {
+            rowData[header.trim()] = row._rawData[index]?.trim() || '';
+          });
+          return rowData;
+        });
+      };
+  
+      const expensesData = extractData(expensesSheetDoc, expensesRows);
+      expensesData.pop(); // Remove any unwanted last entry if necessary
+  
+      // Initialize sums
+      let salarySum = 0;
+      let otherExpensesSum = 0;
+  
+      // Process the data to separate salaries from other expenses
+      expensesData.forEach(item => {
+        const salary = parseFloat(item.Salary.replace(/,/g, '').trim()); // Remove commas, trim whitespace, and convert to number
+        if (isNaN(salary)) return; // Skip if salary is not a valid number
+  
+        const name = item['Teachers Name'].trim().toLowerCase(); // Trim whitespace and convert to lowercase
+        if (name.includes('cleaning') || 
+            name.includes('wifi') ||
+            name.includes('ice') ||
+            name.includes('technical support intern')) {
+          otherExpensesSum += salary;
+        } else {
+          salarySum += salary;
+        }
+      });
+  
+      // Return the results
+      res.json({
+        salarySum,
+        otherExpensesSum,
+      });
+    } catch (error) {
+      console.error('Error accessing Google Sheets:', error);
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+  app.get('/api/analytics/mealCost', async (req, res) => {
+    const { quotationSheet, quotationWorkSheet } = req.query;
+  
+    if (!quotationSheet || !quotationWorkSheet) {
+      return res.status(400).json({ error: 'All sheet and worksheet IDs are required' });
+    }
+  
+    try {
+      // Load the quotation sheet
+      const quotationDoc = new GoogleSpreadsheet(quotationSheet, serviceAccountAuth);
+      await quotationDoc.loadInfo();
+  
+      // Load the expenses sheet
+      const expensesSheetDoc = quotationDoc.sheetsById[quotationWorkSheet];
+      if (!expensesSheetDoc) {
+        return res.status(404).json({ error: 'Expenses worksheet not found' });
+      }
+      const expensesRows = await expensesSheetDoc.getRows();
+  
+      // Extract headers and convert rows to JSON
+      const extractData = (sheet, rows) => {
+        const headers = sheet.headerValues.map(header => header.trim());
+        return rows.map(row => {
+          const rowData = {};
+          headers.forEach((header, index) => {
+            rowData[header] = row._rawData[index]?.trim() || '';
+          });
+          return rowData;
+        });
+      };
+  
+      const expensesData = extractData(expensesSheetDoc, expensesRows);
+  
+      // Filter out rows with invalid or empty dates and skip the last row (total)
+      const validData = expensesData.filter((row, index, array) => {
+        const isLastRow = index === array.length - 1;
+        const hasValidDate = row.Date && row.Date.trim() !== '' && row.Date !== 'TOTAL (PKR)';
+        return hasValidDate && !isLastRow;
+      });
+  
+      // Sum up the "Cost for 200 Meals"
+      const totalCostFor200Meals = validData.reduce((sum, row) => {
+        const cost = parseFloat(row['Cost for 200 Meals'].replace(/,/g, ''));
+        return sum + (isNaN(cost) ? 0 : cost);
+      }, 0);
+  
+      // Return the result
+      res.json({ totalCostFor200Meals });
+    } catch (error) {
+      console.error('Error accessing Google Sheets:', error);
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+  
+  
+  
 export default app;
