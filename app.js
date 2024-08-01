@@ -1,5 +1,4 @@
 // api/index.js
-
 import express from 'express';
 import { GoogleSpreadsheet } from 'google-spreadsheet';
 import bodyParser from 'body-parser';
@@ -231,5 +230,5 @@ app.get('/api/analytics/Studentsvsboxes', async (req, res) => {
   }
 });
 
-// Export the handler for Vercel serverless function
-export const handler = serverless(app);
+ 
+export default app;
