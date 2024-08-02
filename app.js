@@ -294,6 +294,7 @@ app.get('/api/analytics/expenses', async (req, res) => {
       res.status(500).json({ error: 'Internal Server Error' });
     }
   });
+
   app.get('/api/analytics/mealCost', async (req, res) => {
     const { quotationSheet, quotationWorkSheet } = req.query;
   
@@ -347,6 +348,193 @@ app.get('/api/analytics/expenses', async (req, res) => {
       res.status(500).json({ error: 'Internal Server Error' });
     }
   });
+
+
+  const months = [
+    "January", "February", "March", "April", "May", "June", 
+    "July", "August", "September", "October", "November", "December"
+  ];
+
+
+  app.get('/api/analytics/mealCostStudentAverage', async (req, res) => {
+    const { quotationSheet, quotationWorkSheet, attendanceSheet, attendanceWorkSheet } = req.query;
+  
+    if (!quotationSheet || !quotationWorkSheet || !attendanceSheet || !attendanceWorkSheet) {
+      return res.status(400).json({ error: 'All sheet and worksheet IDs are required' });
+    }
+  
+    try {
+      // Load the quotation sheet
+      const quotationDoc = new GoogleSpreadsheet(quotationSheet, serviceAccountAuth);
+      await quotationDoc.loadInfo();
+  
+      // Get the current worksheet
+      const currentExpensesSheetDoc = quotationDoc.sheetsById[quotationWorkSheet];
+      if (!currentExpensesSheetDoc) {
+        return res.status(404).json({ error: 'Current month expenses worksheet not found' });
+      }
+  
+      // Get the name of the current worksheet
+      const currentMonthName = currentExpensesSheetDoc.title;
+      const currentMonthIndex = months.indexOf(currentMonthName);
+      if (currentMonthIndex === -1) {
+        return res.status(400).json({ error: 'Invalid month name for current worksheet' });
+      }
+  
+      // Determine the previous month's worksheet name
+      const previousMonthIndex = (currentMonthIndex === 0) ? 11 : currentMonthIndex - 1;
+      const previousWorkSheetName = months[previousMonthIndex];
+  
+      // Get the previous worksheet by name
+      const previousExpensesSheetDoc = quotationDoc.sheetsByTitle[previousWorkSheetName];
+      if (!previousExpensesSheetDoc) {
+        return res.status(404).json({ error: 'Previous month expenses worksheet not found' });
+      }
+  
+      // Get rows from the current and previous worksheets
+      const currentExpensesRows = await currentExpensesSheetDoc.getRows();
+      const previousExpensesRows = await previousExpensesSheetDoc.getRows();
+  
+      // Extract headers and convert rows to JSON
+      const extractData = (sheet, rows) => {
+        const headers = sheet.headerValues.map(header => header.trim());
+        return rows.map(row => {
+          const rowData = {};
+          headers.forEach((header, index) => {
+            rowData[header] = row._rawData[index]?.trim() || '';
+          });
+          return rowData;
+        });
+      };
+  
+      const currentExpensesData = extractData(currentExpensesSheetDoc, currentExpensesRows);
+      const previousExpensesData = extractData(previousExpensesSheetDoc, previousExpensesRows);
+  
+      // Filter out rows with invalid or empty dates and skip the last row (total)
+      const filterValidData = (data) => {
+        return data.filter((row) => {
+          const hasValidDate = row.Date && row.Date.trim() !== '' && row.Date !== 'TOTAL (PKR)' && row.Date !== '*Sunday Excluded';
+          const hasValidBoxes = row['No. Of Boxes'] && parseFloat(row['No. Of Boxes'].replace(/,/g, '')) !== 0;
+          return hasValidDate && hasValidBoxes;
+        });
+      };
+  
+      const validCurrentData = filterValidData(currentExpensesData);
+      const validPreviousData = filterValidData(previousExpensesData);
+  
+      // Calculate the average number of boxes
+      const calculateAverageBoxes = (data) => {
+        const totalBoxes = data.reduce((sum, row) => {
+          const boxes = parseFloat(row['No. Of Boxes'].replace(/,/g, ''));
+          return sum + (isNaN(boxes) ? 0 : boxes);
+        }, 0);
+        return data.length > 0 ? totalBoxes / data.length : 0;
+      };
+  
+      const averageBoxesCurrent = calculateAverageBoxes(validCurrentData);
+      const averageBoxesPrevious = calculateAverageBoxes(validPreviousData);
+  
+      // Load the attendance sheet
+      const attendanceDoc = new GoogleSpreadsheet(attendanceSheet, serviceAccountAuth);
+      await attendanceDoc.loadInfo();
+  
+      // Get current attendance worksheet
+      const attendanceSheetDocCurrent = attendanceDoc.sheetsById[Number(attendanceWorkSheet)];
+      if (!attendanceSheetDocCurrent) {
+        return res.status(404).json({ error: 'Current attendance worksheet not found' });
+      }
+  
+      // Determine the previous attendance worksheet ID
+      const previousAttendanceWorkSheetId = Number(attendanceWorkSheet) - 1; // Adjust this if needed
+      let previousAttendanceSheetDoc = null;
+      try {
+        previousAttendanceSheetDoc = attendanceDoc.sheetsById[previousAttendanceWorkSheetId];
+        if (!previousAttendanceSheetDoc) {
+          throw new Error('Previous attendance worksheet not found');
+        }
+      } catch {
+        // Previous attendance sheet is not available
+        previousAttendanceSheetDoc = null;
+      }
+  
+      // Get rows from the current attendance worksheet
+      const attendanceRowsCurrent = await attendanceSheetDocCurrent.getRows();
+      const currentAttendanceData = extractData(attendanceSheetDocCurrent, attendanceRowsCurrent);
+  
+      let averageStudentsPresentPrevious = 0;
+  
+      if (previousAttendanceSheetDoc) {
+        const attendanceRowsPrevious = await previousAttendanceSheetDoc.getRows();
+        const previousAttendanceData = extractData(previousAttendanceSheetDoc, attendanceRowsPrevious);
+        
+        // Calculate the number of students present for each day
+        const countStudentsPresent = (data) => {
+          return data.reduce((acc, attendance) => {
+            const date = attendance.Date;
+            if (attendance.Present === '1') { // Consider only present students
+              if (!acc[date]) {
+                acc[date] = 0;
+              }
+              acc[date]++;
+            }
+            return acc;
+          }, {});
+        };
+  
+        const attendanceCountByDatePrevious = countStudentsPresent(previousAttendanceData);
+  
+        // Calculate the overall average number of students present
+        const calculateAverageAttendance = (attendanceCountByDate) => {
+          const totalPresentStudents = Object.values(attendanceCountByDate).reduce((sum, count) => sum + count, 0);
+          const totalDays = Object.keys(attendanceCountByDate).length;
+          return totalDays > 0 ? totalPresentStudents / totalDays : 0;
+        };
+  
+        averageStudentsPresentPrevious = calculateAverageAttendance(attendanceCountByDatePrevious);
+      }
+  
+      // Calculate the number of students present for each day in the current month
+      const countStudentsPresent = (data) => {
+        return data.reduce((acc, attendance) => {
+          const date = attendance.Date;
+          if (attendance.Present === '1') { // Consider only present students
+            if (!acc[date]) {
+              acc[date] = 0;
+            }
+            acc[date]++;
+          }
+          return acc;
+        }, {});
+      };
+  
+      const attendanceCountByDateCurrent = countStudentsPresent(currentAttendanceData);
+  
+      // Calculate the overall average number of students present
+      const calculateAverageAttendance = (attendanceCountByDate) => {
+        const totalPresentStudents = Object.values(attendanceCountByDate).reduce((sum, count) => sum + count, 0);
+        const totalDays = Object.keys(attendanceCountByDate).length;
+        return totalDays > 0 ? totalPresentStudents / totalDays : 0;
+      };
+  
+      const averageStudentsPresentCurrent = calculateAverageAttendance(attendanceCountByDateCurrent);
+  
+      // Return the result with worksheet names and averages
+      res.json({
+        currentWorksheet: currentMonthName,
+        previousWorksheet: previousWorkSheetName,
+        averageBoxesCurrent,
+        averageBoxesPrevious,
+        averageStudentsPresentCurrent,
+        averageStudentsPresentPrevious
+      });
+    } catch (error) {
+      console.error('Error accessing Google Sheets:', error);
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+  
+  
+
   
   
   
