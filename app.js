@@ -533,6 +533,75 @@ app.get('/api/analytics/expenses', async (req, res) => {
     }
   });
   
+
+  app.get('/api/analytics/studentAveragePerClass', async (req, res) => {
+    const { attendanceSheet, attendanceWorkSheet } = req.query;
+  
+    if (!attendanceSheet || !attendanceWorkSheet) {
+      return res.status(400).json({ error: 'All sheet and worksheet IDs are required' });
+    }
+  
+    try {
+      const attendanceDoc = new GoogleSpreadsheet(attendanceSheet, serviceAccountAuth);
+      await attendanceDoc.loadInfo();
+  
+      const attendanceSheetDocCurrent = attendanceDoc.sheetsById[Number(attendanceWorkSheet)];
+      if (!attendanceSheetDocCurrent) {
+        return res.status(404).json({ error: 'Current attendance worksheet not found' });
+      }
+  
+      const attendanceRowsCurrent = await attendanceSheetDocCurrent.getRows();
+      
+      const extractData = (sheet, rows) => {
+        const headers = sheet.headerValues.map(header => header.trim());
+        return rows.map(row => {
+          const rowData = {};
+          headers.forEach((header, index) => {
+            rowData[header] = row._rawData[index]?.trim() || '';
+          });
+          return rowData;
+        });
+      };
+  
+      const currentAttendanceData = extractData(attendanceSheetDocCurrent, attendanceRowsCurrent);
+  
+      const groupedData = currentAttendanceData.reduce((acc, row) => {
+        if (row.Present === '1') {
+          if (!acc[row.Department]) {
+            acc[row.Department] = {};
+          }
+          if (!acc[row.Department][row.Date]) {
+            acc[row.Department][row.Date] = 0;
+          }
+          acc[row.Department][row.Date] += 1;
+        }
+        return acc;
+      }, {});
+  
+      const calculateAverage = (data) => {
+        const result = {};
+        for (const department in data) {
+          const dates = Object.keys(data[department]).sort((a, b) => new Date(b) - new Date(a)).slice(0, 7);
+          const total = dates.reduce((sum, date) => sum + data[department][date], 0);
+          const average = total / dates.length;
+          result[department] = average;
+        }
+        return result;
+      };
+  
+      const averages = calculateAverage(groupedData);
+  
+      const response = Object.entries(averages).map(([department, average]) => ({
+        department,
+        average: average.toFixed(2),
+      }));
+  
+      res.json(response);
+    } catch (error) {
+      console.error('Error accessing Google Sheets:', error);
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
   
 
   
