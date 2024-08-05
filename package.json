@@ -18,6 +18,8 @@
     "express": "^4.19.2",
     "google-spreadsheet": "^4.1.2",
     "googleapis": "^140.0.1",
+    "ioredis": "^5.4.1",
+    "redis": "^4.7.0",
     "serverless-http": "^3.2.0"
   }
 }

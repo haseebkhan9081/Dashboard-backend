@@ -5,11 +5,25 @@ import bodyParser from 'body-parser';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { JWT } from 'google-auth-library';
+import { createClient } from 'redis';
 import { google } from 'googleapis';
+ import {redisConfig} from './config/redisConfig.js';
  
-
 dotenv.config();
 
+const client = createClient({
+  url: `redis://${process.env.REDIS_HOST}:${process.env.REDIS_PORT}`,
+  password: process.env.REDIS_PASSWORD
+});
+
+client.on('error', (err) => {
+  console.error('Redis error:', err);
+});
+
+client.connect().then(() => {
+  console.log('Connected to Redis');
+});
+const CACHE_EXPIRATION_SECONDS = 3600; // Cache expiration time in seconds
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -27,6 +41,8 @@ const serviceAccountAuth = new JWT({
 
 // Initialize Google Drive API
 const drive = google.drive({ version: 'v3', auth: serviceAccountAuth });
+
+ 
 
 // Route to serve dummy HTML at the root
 app.get('/', (req, res) => {
@@ -148,8 +164,17 @@ app.get('/api/analytics/Studentsvsboxes', async (req, res) => {
   if (!attendanceSheet || !quotationSheet || !attendanceWorkSheet || !quotationWorkSheet) {
     return res.status(400).json({ error: 'All sheet and worksheet IDs are required' });
   }
-  
+
+  const cacheKey = `analytics:${attendanceSheet}:${quotationSheet}:${attendanceWorkSheet}:${quotationWorkSheet}`;
+
   try {
+    // Check Redis cache first
+    const cachedData = await client.get(cacheKey);
+    if (cachedData) {
+      console.log('Serving data from cache');
+      return res.json(JSON.parse(cachedData));
+    }
+
     const attendanceDoc = new GoogleSpreadsheet(attendanceSheet, serviceAccountAuth);
     await attendanceDoc.loadInfo();
     const attendanceSheetDoc = attendanceDoc.sheetsById[Number(attendanceWorkSheet)];
@@ -180,9 +205,6 @@ app.get('/api/analytics/Studentsvsboxes', async (req, res) => {
     const attendanceData = extractData(attendanceSheetDoc, attendanceRows);
     const quotationData = extractData(quotationSheetDoc, quotationRows);
 
-    console.log("Attendance Data:", attendanceData);
-    console.log("Quotation Data:", quotationData);
-
     const attendanceCountByDate = attendanceData.reduce((acc, attendance) => {
       const date = attendance.Date;
       if (attendance.Time && attendance.Time.length > 0) {
@@ -207,8 +229,6 @@ app.get('/api/analytics/Studentsvsboxes', async (req, res) => {
         };
       });
 
-    console.log("Cleaned Quotation Data:", cleanedQuotationData);
-
     const resultData = cleanedQuotationData
       .filter(quotation => quotation.NoOfBoxes > 0 && quotation.NoOfPresents > 0)
       .map(quotation => ({
@@ -216,6 +236,9 @@ app.get('/api/analytics/Studentsvsboxes', async (req, res) => {
         NoOfBoxes: quotation.NoOfBoxes,
         NoOfPresents: quotation.NoOfPresents
       }));
+
+    // Cache the result data in Redis
+    await client.setEx(cacheKey, CACHE_EXPIRATION_SECONDS, JSON.stringify(resultData));
 
     res.json(resultData);
   } catch (error) {
@@ -227,138 +250,166 @@ app.get('/api/analytics/Studentsvsboxes', async (req, res) => {
 
 
 app.get('/api/analytics/expenses', async (req, res) => {
-    const { quotationSheet, expensesWorkSheet } = req.query;
-  
-    if (!quotationSheet || !expensesWorkSheet) {
-      return res.status(400).json({ error: 'All sheet and worksheet IDs are required' });
-    }
-  
-    try {
-      // Load the quotation sheet
-      const quotationDoc = new GoogleSpreadsheet(quotationSheet, serviceAccountAuth);
-      await quotationDoc.loadInfo();
-  
-      // Load the expenses sheet
-      const expensesSheetDoc = quotationDoc.sheetsById[expensesWorkSheet];
-      if (!expensesSheetDoc) {
-        return res.status(404).json({ error: 'Expenses worksheet not found' });
-      }
-      const expensesRows = await expensesSheetDoc.getRows();
-  
-      // Extract headers and convert rows to JSON for all sheets
-      const extractData = (sheet, rows) => {
-        const headers = sheet.headerValues;
-        return rows.map(row => {
-          const rowData = {};
-          headers.forEach((header, index) => {
-            rowData[header.trim()] = row._rawData[index]?.trim() || '';
-          });
-          return rowData;
-        });
-      };
-  
-      const expensesData = extractData(expensesSheetDoc, expensesRows);
-      expensesData.pop(); // Remove any unwanted last entry if necessary
-  
-      // Initialize sums
-      let salarySum = 0;
-      let otherExpensesSum = 0;
-  
-      // Process the data to separate salaries from other expenses
-      expensesData.forEach(item => {
-        const salary = parseFloat(item.Salary.replace(/,/g, '').trim()); // Remove commas, trim whitespace, and convert to number
-        if (isNaN(salary)) return; // Skip if salary is not a valid number
-  
-        const name = item['Teachers Name'].trim().toLowerCase(); // Trim whitespace and convert to lowercase
-        if (name.includes('cleaning') || 
-            name.includes('wifi') ||
-            name.includes('ice')) {
-          otherExpensesSum += salary;
-        } else {
-          salarySum += salary;
-        }
-      });
-  
-      // Return the results
-      res.json({
-        salarySum,
-        otherExpensesSum,
-      });
-    } catch (error) {
-      console.error('Error accessing Google Sheets:', error);
-      res.status(500).json({ error: 'Internal Server Error' });
-    }
-  });
+  const { quotationSheet, expensesWorkSheet } = req.query;
 
-  app.get('/api/analytics/mealCost', async (req, res) => {
-    const { quotationSheet } = req.query;
-  
-    if (!quotationSheet) {
-      return res.status(400).json({ error: 'Sheet ID is required' });
+  if (!quotationSheet || !expensesWorkSheet) {
+    return res.status(400).json({ error: 'All sheet and worksheet IDs are required' });
+  }
+
+  const cacheKey = `expenses:${quotationSheet}:${expensesWorkSheet}`;
+
+  try {
+    // Check Redis cache first
+    const cachedData = await client.get(cacheKey);
+    if (cachedData) {
+      console.log('Serving data from cache');
+      return res.json(JSON.parse(cachedData));
     }
-  
-    try {
-      // Load the quotation sheet
-      const quotationDoc = new GoogleSpreadsheet(quotationSheet, serviceAccountAuth);
-      await quotationDoc.loadInfo();
-  
-      const sheetResults = {};
-  
-      // Iterate over all sheets
-      for (const sheetId in quotationDoc.sheetsById) {
-        const sheet = quotationDoc.sheetsById[sheetId];
-  
-        try {
-          await sheet.loadHeaderRow();
-          const headers = sheet.headerValues.map(header => header.trim());
-  
-          // Check if the sheet contains the "Cost for 200 Meals" column
-          if (headers.includes('Cost for 200 Meals')) {
-            const rows = await sheet.getRows();
-  
-            // Extract data and perform calculations
-            const extractData = (sheet, rows) => {
-              return rows.map(row => {
-                const rowData = {};
-                headers.forEach((header, index) => {
-                  rowData[header] = row._rawData[index]?.trim() || '';
-                });
-                return rowData;
-              });
-            };
-  
-            const sheetData = extractData(sheet, rows);
-  
-            // Filter out rows with invalid or empty dates and skip the last row (total)
-            const validData = sheetData.filter((row, index, array) => {
-              const isLastRow = index === array.length - 1;
-              const hasValidDate = row.Date && row.Date.trim() !== '' && row.Date !== 'TOTAL (PKR)';
-              return hasValidDate && !isLastRow;
-            });
-  
-            // Sum up the "Cost for 200 Meals"
-            const totalCostFor200Meals = validData.reduce((sum, row) => {
-              const cost = parseFloat(row['Cost for 200 Meals'].replace(/,/g, ''));
-              return sum + (isNaN(cost) ? 0 : cost);
-            }, 0);
-  
-            // Store the result with the sheet name
-            sheetResults[sheet.title] = totalCostFor200Meals;
-          }
-        } catch (error) {
-          console.warn(`Error processing sheet ${sheet.title}:`, error.message);
-          // You may want to handle individual sheet errors differently, e.g., continue processing other sheets
-        }
+
+    // Load the quotation sheet
+    const quotationDoc = new GoogleSpreadsheet(quotationSheet, serviceAccountAuth);
+    await quotationDoc.loadInfo();
+
+    // Load the expenses sheet
+    const expensesSheetDoc = quotationDoc.sheetsById[expensesWorkSheet];
+    if (!expensesSheetDoc) {
+      return res.status(404).json({ error: 'Expenses worksheet not found' });
+    }
+    const expensesRows = await expensesSheetDoc.getRows();
+
+    // Extract headers and convert rows to JSON for all sheets
+    const extractData = (sheet, rows) => {
+      const headers = sheet.headerValues;
+      return rows.map(row => {
+        const rowData = {};
+        headers.forEach((header, index) => {
+          rowData[header.trim()] = row._rawData[index]?.trim() || '';
+        });
+        return rowData;
+      });
+    };
+
+    const expensesData = extractData(expensesSheetDoc, expensesRows);
+    expensesData.pop(); // Remove any unwanted last entry if necessary
+
+    // Initialize sums
+    let salarySum = 0;
+    let otherExpensesSum = 0;
+
+    // Process the data to separate salaries from other expenses
+    expensesData.forEach(item => {
+      const salary = parseFloat(item.Salary.replace(/,/g, '').trim()); // Remove commas, trim whitespace, and convert to number
+      if (isNaN(salary)) return; // Skip if salary is not a valid number
+
+      const name = item['Teachers Name'].trim().toLowerCase(); // Trim whitespace and convert to lowercase
+      if (name.includes('cleaning') || 
+          name.includes('wifi') ||
+          name.includes('ice')) {
+        otherExpensesSum += salary;
+      } else {
+        salarySum += salary;
       }
-  
-      // Return the result
-      console.log(sheetResults);
-      res.json(sheetResults);
-    } catch (error) {
-      console.error('Error accessing Google Sheets:', error);
-      res.status(500).json({ error: 'Internal Server Error' });
+    });
+
+    const resultData = {
+      salarySum,
+      otherExpensesSum,
+    };
+
+    // Cache the result data in Redis
+    await client.setEx(cacheKey, CACHE_EXPIRATION_SECONDS, JSON.stringify(resultData));
+
+    // Return the results
+    res.json(resultData);
+  } catch (error) {
+    console.error('Error accessing Google Sheets:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+app.get('/api/analytics/mealCost', async (req, res) => {
+  const { quotationSheet } = req.query;
+
+  if (!quotationSheet) {
+    return res.status(400).json({ error: 'Sheet ID is required' });
+  }
+
+  const cacheKey = `mealCost:${quotationSheet}`;
+   
+
+  try {
+    // Check Redis cache first
+    const cachedData = await client.get(cacheKey);
+    if (cachedData) {
+      console.log('Serving data from cache');
+      return res.json(JSON.parse(cachedData));
     }
-  });
+
+    // Load the quotation sheet
+    const quotationDoc = new GoogleSpreadsheet(quotationSheet, serviceAccountAuth);
+    await quotationDoc.loadInfo();
+
+    const sheetResults = {};
+
+    // Iterate over all sheets
+    for (const sheetId in quotationDoc.sheetsById) {
+      const sheet = quotationDoc.sheetsById[sheetId];
+
+      try {
+        await sheet.loadHeaderRow();
+        const headers = sheet.headerValues.map(header => header.trim());
+
+        // Check if the sheet contains the "Cost for 200 Meals" column
+        if (headers.includes('Cost for 200 Meals')) {
+          const rows = await sheet.getRows();
+
+          // Extract data and perform calculations
+          const extractData = (sheet, rows) => {
+            return rows.map(row => {
+              const rowData = {};
+              headers.forEach((header, index) => {
+                rowData[header] = row._rawData[index]?.trim() || '';
+              });
+              return rowData;
+            });
+          };
+
+          const sheetData = extractData(sheet, rows);
+
+          // Filter out rows with invalid or empty dates and skip the last row (total)
+          const validData = sheetData.filter((row, index, array) => {
+            const isLastRow = index === array.length - 1;
+            const hasValidDate = row.Date && row.Date.trim() !== '' && row.Date !== 'TOTAL (PKR)';
+            return hasValidDate && !isLastRow;
+          });
+
+          // Sum up the "Cost for 200 Meals"
+          const totalCostFor200Meals = validData.reduce((sum, row) => {
+            const cost = parseFloat(row['Cost for 200 Meals'].replace(/,/g, ''));
+            return sum + (isNaN(cost) ? 0 : cost);
+          }, 0);
+
+          // Store the result with the sheet name
+          sheetResults[sheet.title] = totalCostFor200Meals;
+        }
+      } catch (error) {
+        console.warn(`Error processing sheet ${sheet.title}:`, error.message);
+        // You may want to handle individual sheet errors differently, e.g., continue processing other sheets
+      }
+    }
+
+    // Cache the result
+    await client.setEx(cacheKey, CACHE_EXPIRATION_SECONDS, JSON.stringify(sheetResults));
+
+    // Return the result
+    console.log(sheetResults);
+    res.json(sheetResults);
+  } catch (error) {
+    console.error('Error accessing Google Sheets:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
   
   
 
@@ -379,7 +430,16 @@ app.get('/api/analytics/expenses', async (req, res) => {
       return res.status(400).json({ error: 'All sheet and worksheet IDs are required' });
     }
   
+    const cacheKey = `mealCostStudentAverage:${quotationSheet}:${quotationWorkSheet}:${attendanceSheet}:${attendanceWorkSheet}`;
+  
     try {
+      // Check if result is cached
+      const cachedResult = await client.get(cacheKey);
+      if (cachedResult) {
+        console.log("serving data from cache");
+        return res.json(JSON.parse(cachedResult));
+      }
+  
       // Load the quotation sheet
       const quotationDoc = new GoogleSpreadsheet(quotationSheet, serviceAccountAuth);
       await quotationDoc.loadInfo();
@@ -392,38 +452,25 @@ app.get('/api/analytics/expenses', async (req, res) => {
         return res.status(404).json({ error: 'Current month expenses worksheet not found' });
       }
   
-      // Get the name of the current worksheet and convert to lowercase
       const currentMonthName = currentExpensesSheetDoc.title.toLowerCase();
       const currentMonthIndex = months.indexOf(currentMonthName);
       if (currentMonthIndex === -1) {
         return res.status(400).json({ error: 'Invalid month name for current worksheet' });
       }
   
-      // Determine the previous month's worksheet name
       const previousMonthIndex = (currentMonthIndex === 0) ? 11 : currentMonthIndex - 1;
       const previousWorkSheetName = months[previousMonthIndex];
   
-      // Load all worksheets from quotation sheet
       const allQuotationSheets = quotationDoc.sheetsByIndex;
-  
-      // Search for the previous month's worksheet by title (case insensitive)
-      let previousExpensesSheetDoc = null;
-      for (const sheet of allQuotationSheets) {
-        if (sheet.title.toLowerCase() === previousWorkSheetName) {
-          previousExpensesSheetDoc = sheet;
-          break;
-        }
-      }
+      let previousExpensesSheetDoc = allQuotationSheets.find(sheet => sheet.title.toLowerCase() === previousWorkSheetName);
   
       if (!previousExpensesSheetDoc) {
         return res.status(404).json({ error: 'Previous month expenses worksheet not found' });
       }
   
-      // Get rows from the current and previous worksheets
       const currentExpensesRows = await currentExpensesSheetDoc.getRows();
       const previousExpensesRows = await previousExpensesSheetDoc.getRows();
   
-      // Extract headers and convert rows to JSON
       const extractData = (sheet, rows) => {
         const headers = sheet.headerValues.map(header => header.trim());
         return rows.map(row => {
@@ -438,7 +485,6 @@ app.get('/api/analytics/expenses', async (req, res) => {
       const currentExpensesData = extractData(currentExpensesSheetDoc, currentExpensesRows);
       const previousExpensesData = extractData(previousExpensesSheetDoc, previousExpensesRows);
   
-      // Filter out rows with invalid or empty dates and skip the last row (total)
       const filterValidData = (data) => {
         return data.filter((row) => {
           const hasValidDate = row.Date && row.Date.trim() !== '' && row.Date !== 'TOTAL (PKR)' && row.Date !== '*Sunday Excluded';
@@ -459,40 +505,26 @@ app.get('/api/analytics/expenses', async (req, res) => {
           }
           return acc;
         }, { totalBoxes: 0, daysWithBoxes: 0 });
-      
+  
         return daysWithBoxes > 0 ? totalBoxes / daysWithBoxes : 0;
       };
-      
   
       const averageBoxesCurrent = calculateAverageBoxes(validCurrentData);
       const averageBoxesPrevious = calculateAverageBoxes(validPreviousData);
   
-      // Load all worksheets from attendance sheet
       const allAttendanceSheets = attendanceDoc.sheetsByIndex;
-  
-      // Get current attendance worksheet
       const attendanceSheetDocCurrent = attendanceDoc.sheetsById[Number(attendanceWorkSheet)];
       if (!attendanceSheetDocCurrent) {
         return res.status(404).json({ error: 'Current attendance worksheet not found' });
       }
   
-      // Determine the previous attendance worksheet name
       const previousAttendanceWorkSheetName = months[previousMonthIndex];
+      let previousAttendanceSheetDoc = allAttendanceSheets.find(sheet => sheet.title.toLowerCase() === previousAttendanceWorkSheetName);
   
-      // Search for the previous month's attendance worksheet by title (case insensitive)
-      let previousAttendanceSheetDoc = null;
-      for (const sheet of allAttendanceSheets) {
-        if (sheet.title.toLowerCase() === previousAttendanceWorkSheetName) {
-          previousAttendanceSheetDoc = sheet;
-          break;
-        }
-      }
-  
-      // Function to count students present
       const countStudentsPresent = (data) => {
         return data.reduce((acc, attendance) => {
           const date = attendance.Date;
-          if (attendance.Time && attendance.Time.length > 0) { // Consider only present students
+          if (attendance.Time && attendance.Time.length > 0) {
             if (!acc[date]) {
               acc[date] = 0;
             }
@@ -502,7 +534,6 @@ app.get('/api/analytics/expenses', async (req, res) => {
         }, {});
       };
   
-      // Get rows from the current attendance worksheet
       const attendanceRowsCurrent = await attendanceSheetDocCurrent.getRows();
       const currentAttendanceData = extractData(attendanceSheetDocCurrent, attendanceRowsCurrent);
   
@@ -511,10 +542,9 @@ app.get('/api/analytics/expenses', async (req, res) => {
       if (previousAttendanceSheetDoc) {
         const attendanceRowsPrevious = await previousAttendanceSheetDoc.getRows();
         const previousAttendanceData = extractData(previousAttendanceSheetDoc, attendanceRowsPrevious);
-        
+  
         const attendanceCountByDatePrevious = countStudentsPresent(previousAttendanceData);
   
-        // Function to calculate the overall average number of students present
         const calculateAverageAttendance = (attendanceCountByDate) => {
           const { totalPresentStudents, daysWithAttendance } = Object.entries(attendanceCountByDate).reduce((acc, [date, count]) => {
             if (count > 0) {
@@ -523,16 +553,14 @@ app.get('/api/analytics/expenses', async (req, res) => {
             }
             return acc;
           }, { totalPresentStudents: 0, daysWithAttendance: 0 });
-        
+  
           return daysWithAttendance > 0 ? totalPresentStudents / daysWithAttendance : 0;
         };
-        
-  console.log("attendanceCountByDate prevous ",attendanceCountByDatePrevious);
+  
         averageStudentsPresentPrevious = calculateAverageAttendance(attendanceCountByDatePrevious);
       }
   
       const attendanceCountByDateCurrent = countStudentsPresent(currentAttendanceData);
-      console.log("attendanceCountByDate current ",attendanceCountByDateCurrent);
   
       const calculateAverageAttendance = (attendanceCountByDate) => {
         const { totalPresentStudents, daysWithAttendance } = Object.entries(attendanceCountByDate).reduce((acc, [date, count]) => {
@@ -542,22 +570,26 @@ app.get('/api/analytics/expenses', async (req, res) => {
           }
           return acc;
         }, { totalPresentStudents: 0, daysWithAttendance: 0 });
-      
+  
         return daysWithAttendance > 0 ? totalPresentStudents / daysWithAttendance : 0;
       };
-      
   
       const averageStudentsPresentCurrent = calculateAverageAttendance(attendanceCountByDateCurrent);
   
-      // Return the result with worksheet names and averages
-      res.json({
+      const result = {
         currentWorksheet: currentMonthName,
         previousWorksheet: previousWorkSheetName,
         averageBoxesCurrent,
         averageBoxesPrevious,
         averageStudentsPresentCurrent,
         averageStudentsPresentPrevious
-      });
+      };
+  
+      // Cache the result
+      await client.setEx(cacheKey, CACHE_EXPIRATION_SECONDS, JSON.stringify(result));
+  
+      // Return the result
+      res.json(result);
     } catch (error) {
       console.error('Error accessing Google Sheets:', error);
       res.status(500).json({ error: 'Internal Server Error' });
@@ -574,7 +606,16 @@ app.get('/api/analytics/expenses', async (req, res) => {
       return res.status(400).json({ error: 'All sheet and worksheet IDs are required' });
     }
   
+    const cacheKey = `studentAveragePerClass:${attendanceSheet}:${attendanceWorkSheet}`;
+  
     try {
+      // Check if result is cached
+      const cachedResult = await client.get(cacheKey);
+      if (cachedResult) {
+        console.log('Serving data from cache');
+        return res.json(JSON.parse(cachedResult));
+      }
+  
       const attendanceDoc = new GoogleSpreadsheet(attendanceSheet, serviceAccountAuth);
       await attendanceDoc.loadInfo();
   
@@ -632,6 +673,10 @@ app.get('/api/analytics/expenses', async (req, res) => {
         }))
         .sort((a, b) => a.department.localeCompare(b.department)); // Sort alphabetically by department name
   
+      // Cache the result
+      await client.setEx(cacheKey, CACHE_EXPIRATION_SECONDS, JSON.stringify(response));
+  
+      // Return the result
       res.json(response);
     } catch (error) {
       console.error('Error accessing Google Sheets:', error);
