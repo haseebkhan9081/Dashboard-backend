@@ -150,7 +150,6 @@ app.get('/api/analytics/Studentsvsboxes', async (req, res) => {
   }
   
   try {
-    // Load the attendance sheet and worksheet
     const attendanceDoc = new GoogleSpreadsheet(attendanceSheet, serviceAccountAuth);
     await attendanceDoc.loadInfo();
     const attendanceSheetDoc = attendanceDoc.sheetsById[Number(attendanceWorkSheet)];
@@ -159,7 +158,6 @@ app.get('/api/analytics/Studentsvsboxes', async (req, res) => {
     }
     const attendanceRows = await attendanceSheetDoc.getRows();
 
-    // Load the quotation sheet and worksheet
     const quotationDoc = new GoogleSpreadsheet(quotationSheet, serviceAccountAuth);
     await quotationDoc.loadInfo();
     const quotationSheetDoc = quotationDoc.sheetsById[quotationWorkSheet];
@@ -168,13 +166,12 @@ app.get('/api/analytics/Studentsvsboxes', async (req, res) => {
     }
     const quotationRows = await quotationSheetDoc.getRows();
 
-    // Extract headers and convert rows to JSON for all sheets
     const extractData = (sheet, rows) => {
       const headers = sheet.headerValues;
       return rows.map(row => {
         const rowData = {};
         headers.forEach((header, index) => {
-          rowData[header] = row._rawData[index];
+          rowData[header] = row._rawData[index] || ''; // Default to empty string if undefined
         });
         return rowData;
       });
@@ -182,11 +179,13 @@ app.get('/api/analytics/Studentsvsboxes', async (req, res) => {
 
     const attendanceData = extractData(attendanceSheetDoc, attendanceRows);
     const quotationData = extractData(quotationSheetDoc, quotationRows);
-    console.log("Attendance Data in Studentsvsboxes ",attendanceData);
+
+    console.log("Attendance Data:", attendanceData);
+    console.log("Quotation Data:", quotationData);
 
     const attendanceCountByDate = attendanceData.reduce((acc, attendance) => {
       const date = attendance.Date;
-      if (attendance.Time && attendance.Time.length > 0) { // Consider only present employees
+      if (attendance.Time && attendance.Time.length > 0) {
         if (!acc[date]) {
           acc[date] = 0;
         }
@@ -199,21 +198,24 @@ app.get('/api/analytics/Studentsvsboxes', async (req, res) => {
       .filter(quotation => quotation.Date && isValidDate(quotation.Date) && !quotation.Date.includes('TOTAL') && !quotation.Date.includes('Sunday Excluded'))
       .map(quotation => {
         const date = quotation.Date;
+        const noOfBoxes = quotation['No. Of Boxes'];
+        
         return {
           Date: date,
-          NoOfBoxes: parseFloat(quotation['No. Of Boxes'].replace(/,/g, '')) || 0,
+          NoOfBoxes: noOfBoxes ? parseFloat(noOfBoxes.replace(/,/g, '')) || 0 : 0,
           NoOfPresents: attendanceCountByDate[date] || 0
         };
       });
 
-      const resultData = cleanedQuotationData
+    console.log("Cleaned Quotation Data:", cleanedQuotationData);
+
+    const resultData = cleanedQuotationData
       .filter(quotation => quotation.NoOfBoxes > 0 && quotation.NoOfPresents > 0)
       .map(quotation => ({
         Date: quotation.Date,
         NoOfBoxes: quotation.NoOfBoxes,
         NoOfPresents: quotation.NoOfPresents
       }));
-    console.log("Attendance Data in Studentsvsboxes ",attendanceCountByDate);
 
     res.json(resultData);
   } catch (error) {
@@ -221,6 +223,7 @@ app.get('/api/analytics/Studentsvsboxes', async (req, res) => {
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
+
 
 
 app.get('/api/analytics/expenses', async (req, res) => {
