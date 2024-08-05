@@ -143,12 +143,12 @@ app.get('/api/sheet/worksheet/data', async (req, res) => {
 
 // Endpoint to fetch analytics data
 app.get('/api/analytics/Studentsvsboxes', async (req, res) => {
-  const { attendanceSheet, quotationSheet, attendanceWorkSheet, quotationWorkSheet, expensesWorkSheet } = req.query;
+  const { attendanceSheet, quotationSheet, attendanceWorkSheet, quotationWorkSheet } = req.query;
 
-  if (!attendanceSheet || !quotationSheet || !attendanceWorkSheet || !quotationWorkSheet || !expensesWorkSheet) {
+  if (!attendanceSheet || !quotationSheet || !attendanceWorkSheet || !quotationWorkSheet) {
     return res.status(400).json({ error: 'All sheet and worksheet IDs are required' });
   }
-
+  
   try {
     // Load the attendance sheet and worksheet
     const attendanceDoc = new GoogleSpreadsheet(attendanceSheet, serviceAccountAuth);
@@ -168,13 +168,6 @@ app.get('/api/analytics/Studentsvsboxes', async (req, res) => {
     }
     const quotationRows = await quotationSheetDoc.getRows();
 
-    // Load the expenses sheet and worksheet
-    const expensesSheetDoc = quotationDoc.sheetsById[expensesWorkSheet];
-    if (!expensesSheetDoc) {
-      return res.status(404).json({ error: 'Expenses worksheet not found' });
-    }
-    const expensesRows = await expensesSheetDoc.getRows();
-
     // Extract headers and convert rows to JSON for all sheets
     const extractData = (sheet, rows) => {
       const headers = sheet.headerValues;
@@ -189,12 +182,10 @@ app.get('/api/analytics/Studentsvsboxes', async (req, res) => {
 
     const attendanceData = extractData(attendanceSheetDoc, attendanceRows);
     const quotationData = extractData(quotationSheetDoc, quotationRows);
-    const expensesData = extractData(expensesSheetDoc, expensesRows);
-    expensesData.pop();
 
     const attendanceCountByDate = attendanceData.reduce((acc, attendance) => {
       const date = attendance.Date;
-      if (!attendance.Absent) { // Consider only present employees
+      if (attendance.Time && attendance.Time.length > 0) { // Consider only present employees
         if (!acc[date]) {
           acc[date] = 0;
         }
@@ -209,19 +200,18 @@ app.get('/api/analytics/Studentsvsboxes', async (req, res) => {
         const date = quotation.Date;
         return {
           Date: date,
-          NoOfBoxes: quotation['No. Of Boxes'],
+          NoOfBoxes: parseFloat(quotation['No. Of Boxes'].replace(/,/g, '')) || 0,
           NoOfPresents: attendanceCountByDate[date] || 0
         };
       });
 
-    const resultData = cleanedQuotationData.map(quotation => {
-      const date = quotation.Date;
-      return {
-        Date: date,
-        NoOfBoxes: quotation.NoOfBoxes, // Accessing the 'No. Of Boxes' field
-        NoOfPresents: attendanceCountByDate[date] || 0
-      };
-    });
+    const resultData = cleanedQuotationData.filter(quotation => 
+      (quotation.NoOfBoxes > 0 || !isNaN(quotation.NoOfBoxes)) || (quotation.NoOfPresents > 0 || !isNaN(quotation.NoOfPresents))
+    ).map(quotation => ({
+      Date: quotation.Date,
+      NoOfBoxes: quotation.NoOfBoxes,
+      NoOfPresents: quotation.NoOfPresents
+    }));
 
     res.json(resultData);
   } catch (error) {
@@ -229,6 +219,7 @@ app.get('/api/analytics/Studentsvsboxes', async (req, res) => {
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
+
 
 app.get('/api/analytics/expenses', async (req, res) => {
     const { quotationSheet, expensesWorkSheet } = req.query;
@@ -276,8 +267,7 @@ app.get('/api/analytics/expenses', async (req, res) => {
         const name = item['Teachers Name'].trim().toLowerCase(); // Trim whitespace and convert to lowercase
         if (name.includes('cleaning') || 
             name.includes('wifi') ||
-            name.includes('ice') ||
-            name.includes('technical support intern')) {
+            name.includes('ice')) {
           otherExpensesSum += salary;
         } else {
           salarySum += salary;
@@ -296,10 +286,10 @@ app.get('/api/analytics/expenses', async (req, res) => {
   });
 
   app.get('/api/analytics/mealCost', async (req, res) => {
-    const { quotationSheet, quotationWorkSheet } = req.query;
+    const { quotationSheet } = req.query;
   
-    if (!quotationSheet || !quotationWorkSheet) {
-      return res.status(400).json({ error: 'All sheet and worksheet IDs are required' });
+    if (!quotationSheet) {
+      return res.status(400).json({ error: 'Sheet ID is required' });
     }
   
     try {
@@ -307,55 +297,76 @@ app.get('/api/analytics/expenses', async (req, res) => {
       const quotationDoc = new GoogleSpreadsheet(quotationSheet, serviceAccountAuth);
       await quotationDoc.loadInfo();
   
-      // Load the expenses sheet
-      const expensesSheetDoc = quotationDoc.sheetsById[quotationWorkSheet];
-      if (!expensesSheetDoc) {
-        return res.status(404).json({ error: 'Expenses worksheet not found' });
+      const sheetResults = {};
+  
+      // Iterate over all sheets
+      for (const sheetId in quotationDoc.sheetsById) {
+        const sheet = quotationDoc.sheetsById[sheetId];
+  
+        try {
+          await sheet.loadHeaderRow();
+          const headers = sheet.headerValues.map(header => header.trim());
+  
+          // Check if the sheet contains the "Cost for 200 Meals" column
+          if (headers.includes('Cost for 200 Meals')) {
+            const rows = await sheet.getRows();
+  
+            // Extract data and perform calculations
+            const extractData = (sheet, rows) => {
+              return rows.map(row => {
+                const rowData = {};
+                headers.forEach((header, index) => {
+                  rowData[header] = row._rawData[index]?.trim() || '';
+                });
+                return rowData;
+              });
+            };
+  
+            const sheetData = extractData(sheet, rows);
+  
+            // Filter out rows with invalid or empty dates and skip the last row (total)
+            const validData = sheetData.filter((row, index, array) => {
+              const isLastRow = index === array.length - 1;
+              const hasValidDate = row.Date && row.Date.trim() !== '' && row.Date !== 'TOTAL (PKR)';
+              return hasValidDate && !isLastRow;
+            });
+  
+            // Sum up the "Cost for 200 Meals"
+            const totalCostFor200Meals = validData.reduce((sum, row) => {
+              const cost = parseFloat(row['Cost for 200 Meals'].replace(/,/g, ''));
+              return sum + (isNaN(cost) ? 0 : cost);
+            }, 0);
+  
+            // Store the result with the sheet name
+            sheetResults[sheet.title] = totalCostFor200Meals;
+          }
+        } catch (error) {
+          console.warn(`Error processing sheet ${sheet.title}:`, error.message);
+          // You may want to handle individual sheet errors differently, e.g., continue processing other sheets
+        }
       }
-      const expensesRows = await expensesSheetDoc.getRows();
-  
-      // Extract headers and convert rows to JSON
-      const extractData = (sheet, rows) => {
-        const headers = sheet.headerValues.map(header => header.trim());
-        return rows.map(row => {
-          const rowData = {};
-          headers.forEach((header, index) => {
-            rowData[header] = row._rawData[index]?.trim() || '';
-          });
-          return rowData;
-        });
-      };
-  
-      const expensesData = extractData(expensesSheetDoc, expensesRows);
-  
-      // Filter out rows with invalid or empty dates and skip the last row (total)
-      const validData = expensesData.filter((row, index, array) => {
-        const isLastRow = index === array.length - 1;
-        const hasValidDate = row.Date && row.Date.trim() !== '' && row.Date !== 'TOTAL (PKR)';
-        return hasValidDate && !isLastRow;
-      });
-  
-      // Sum up the "Cost for 200 Meals"
-      const totalCostFor200Meals = validData.reduce((sum, row) => {
-        const cost = parseFloat(row['Cost for 200 Meals'].replace(/,/g, ''));
-        return sum + (isNaN(cost) ? 0 : cost);
-      }, 0);
   
       // Return the result
-      res.json({ totalCostFor200Meals });
+      console.log(sheetResults);
+      res.json(sheetResults);
     } catch (error) {
       console.error('Error accessing Google Sheets:', error);
       res.status(500).json({ error: 'Internal Server Error' });
     }
   });
+  
+  
 
 
+ 
+
+  
+  // Convert months array to lowercase for case-insensitive comparison
   const months = [
     "January", "February", "March", "April", "May", "June", 
     "July", "August", "September", "October", "November", "December"
-  ];
-
-
+  ].map(month => month.toLowerCase());
+  
   app.get('/api/analytics/mealCostStudentAverage', async (req, res) => {
     const { quotationSheet, quotationWorkSheet, attendanceSheet, attendanceWorkSheet } = req.query;
   
@@ -367,6 +378,8 @@ app.get('/api/analytics/expenses', async (req, res) => {
       // Load the quotation sheet
       const quotationDoc = new GoogleSpreadsheet(quotationSheet, serviceAccountAuth);
       await quotationDoc.loadInfo();
+      const attendanceDoc = new GoogleSpreadsheet(attendanceSheet, serviceAccountAuth);
+      await attendanceDoc.loadInfo();
   
       // Get the current worksheet
       const currentExpensesSheetDoc = quotationDoc.sheetsById[quotationWorkSheet];
@@ -374,8 +387,8 @@ app.get('/api/analytics/expenses', async (req, res) => {
         return res.status(404).json({ error: 'Current month expenses worksheet not found' });
       }
   
-      // Get the name of the current worksheet
-      const currentMonthName = currentExpensesSheetDoc.title;
+      // Get the name of the current worksheet and convert to lowercase
+      const currentMonthName = currentExpensesSheetDoc.title.toLowerCase();
       const currentMonthIndex = months.indexOf(currentMonthName);
       if (currentMonthIndex === -1) {
         return res.status(400).json({ error: 'Invalid month name for current worksheet' });
@@ -385,8 +398,18 @@ app.get('/api/analytics/expenses', async (req, res) => {
       const previousMonthIndex = (currentMonthIndex === 0) ? 11 : currentMonthIndex - 1;
       const previousWorkSheetName = months[previousMonthIndex];
   
-      // Get the previous worksheet by name
-      const previousExpensesSheetDoc = quotationDoc.sheetsByTitle[previousWorkSheetName];
+      // Load all worksheets from quotation sheet
+      const allQuotationSheets = quotationDoc.sheetsByIndex;
+  
+      // Search for the previous month's worksheet by title (case insensitive)
+      let previousExpensesSheetDoc = null;
+      for (const sheet of allQuotationSheets) {
+        if (sheet.title.toLowerCase() === previousWorkSheetName) {
+          previousExpensesSheetDoc = sheet;
+          break;
+        }
+      }
+  
       if (!previousExpensesSheetDoc) {
         return res.status(404).json({ error: 'Previous month expenses worksheet not found' });
       }
@@ -422,21 +445,25 @@ app.get('/api/analytics/expenses', async (req, res) => {
       const validCurrentData = filterValidData(currentExpensesData);
       const validPreviousData = filterValidData(previousExpensesData);
   
-      // Calculate the average number of boxes
       const calculateAverageBoxes = (data) => {
-        const totalBoxes = data.reduce((sum, row) => {
+        const { totalBoxes, daysWithBoxes } = data.reduce((acc, row) => {
           const boxes = parseFloat(row['No. Of Boxes'].replace(/,/g, ''));
-          return sum + (isNaN(boxes) ? 0 : boxes);
-        }, 0);
-        return data.length > 0 ? totalBoxes / data.length : 0;
+          if (!isNaN(boxes) && boxes > 0) {
+            acc.totalBoxes += boxes;
+            acc.daysWithBoxes += 1;
+          }
+          return acc;
+        }, { totalBoxes: 0, daysWithBoxes: 0 });
+      
+        return daysWithBoxes > 0 ? totalBoxes / daysWithBoxes : 0;
       };
+      
   
       const averageBoxesCurrent = calculateAverageBoxes(validCurrentData);
       const averageBoxesPrevious = calculateAverageBoxes(validPreviousData);
   
-      // Load the attendance sheet
-      const attendanceDoc = new GoogleSpreadsheet(attendanceSheet, serviceAccountAuth);
-      await attendanceDoc.loadInfo();
+      // Load all worksheets from attendance sheet
+      const allAttendanceSheets = attendanceDoc.sheetsByIndex;
   
       // Get current attendance worksheet
       const attendanceSheetDocCurrent = attendanceDoc.sheetsById[Number(attendanceWorkSheet)];
@@ -444,18 +471,31 @@ app.get('/api/analytics/expenses', async (req, res) => {
         return res.status(404).json({ error: 'Current attendance worksheet not found' });
       }
   
-      // Determine the previous attendance worksheet ID
-      const previousAttendanceWorkSheetId = Number(attendanceWorkSheet) - 1; // Adjust this if needed
+      // Determine the previous attendance worksheet name
+      const previousAttendanceWorkSheetName = months[previousMonthIndex];
+  
+      // Search for the previous month's attendance worksheet by title (case insensitive)
       let previousAttendanceSheetDoc = null;
-      try {
-        previousAttendanceSheetDoc = attendanceDoc.sheetsById[previousAttendanceWorkSheetId];
-        if (!previousAttendanceSheetDoc) {
-          throw new Error('Previous attendance worksheet not found');
+      for (const sheet of allAttendanceSheets) {
+        if (sheet.title.toLowerCase() === previousAttendanceWorkSheetName) {
+          previousAttendanceSheetDoc = sheet;
+          break;
         }
-      } catch {
-        // Previous attendance sheet is not available
-        previousAttendanceSheetDoc = null;
       }
+  
+      // Function to count students present
+      const countStudentsPresent = (data) => {
+        return data.reduce((acc, attendance) => {
+          const date = attendance.Date;
+          if (attendance.Time && attendance.Time.length > 0) { // Consider only present students
+            if (!acc[date]) {
+              acc[date] = 0;
+            }
+            acc[date]++;
+          }
+          return acc;
+        }, {});
+      };
   
       // Get rows from the current attendance worksheet
       const attendanceRowsCurrent = await attendanceSheetDocCurrent.getRows();
@@ -467,54 +507,40 @@ app.get('/api/analytics/expenses', async (req, res) => {
         const attendanceRowsPrevious = await previousAttendanceSheetDoc.getRows();
         const previousAttendanceData = extractData(previousAttendanceSheetDoc, attendanceRowsPrevious);
         
-        // Calculate the number of students present for each day
-        const countStudentsPresent = (data) => {
-          return data.reduce((acc, attendance) => {
-            const date = attendance.Date;
-            if (attendance.Present === '1') { // Consider only present students
-              if (!acc[date]) {
-                acc[date] = 0;
-              }
-              acc[date]++;
-            }
-            return acc;
-          }, {});
-        };
-  
         const attendanceCountByDatePrevious = countStudentsPresent(previousAttendanceData);
   
-        // Calculate the overall average number of students present
+        // Function to calculate the overall average number of students present
         const calculateAverageAttendance = (attendanceCountByDate) => {
-          const totalPresentStudents = Object.values(attendanceCountByDate).reduce((sum, count) => sum + count, 0);
-          const totalDays = Object.keys(attendanceCountByDate).length;
-          return totalDays > 0 ? totalPresentStudents / totalDays : 0;
+          const { totalPresentStudents, daysWithAttendance } = Object.entries(attendanceCountByDate).reduce((acc, [date, count]) => {
+            if (count > 0) {
+              acc.totalPresentStudents += count;
+              acc.daysWithAttendance += 1;
+            }
+            return acc;
+          }, { totalPresentStudents: 0, daysWithAttendance: 0 });
+        
+          return daysWithAttendance > 0 ? totalPresentStudents / daysWithAttendance : 0;
         };
-  
+        
+  console.log("attendanceCountByDate prevous ",attendanceCountByDatePrevious);
         averageStudentsPresentPrevious = calculateAverageAttendance(attendanceCountByDatePrevious);
       }
   
-      // Calculate the number of students present for each day in the current month
-      const countStudentsPresent = (data) => {
-        return data.reduce((acc, attendance) => {
-          const date = attendance.Date;
-          if (attendance.Present === '1') { // Consider only present students
-            if (!acc[date]) {
-              acc[date] = 0;
-            }
-            acc[date]++;
+      const attendanceCountByDateCurrent = countStudentsPresent(currentAttendanceData);
+      console.log("attendanceCountByDate current ",attendanceCountByDateCurrent);
+  
+      const calculateAverageAttendance = (attendanceCountByDate) => {
+        const { totalPresentStudents, daysWithAttendance } = Object.entries(attendanceCountByDate).reduce((acc, [date, count]) => {
+          if (count > 0) {
+            acc.totalPresentStudents += count;
+            acc.daysWithAttendance += 1;
           }
           return acc;
-        }, {});
+        }, { totalPresentStudents: 0, daysWithAttendance: 0 });
+      
+        return daysWithAttendance > 0 ? totalPresentStudents / daysWithAttendance : 0;
       };
-  
-      const attendanceCountByDateCurrent = countStudentsPresent(currentAttendanceData);
-  
-      // Calculate the overall average number of students present
-      const calculateAverageAttendance = (attendanceCountByDate) => {
-        const totalPresentStudents = Object.values(attendanceCountByDate).reduce((sum, count) => sum + count, 0);
-        const totalDays = Object.keys(attendanceCountByDate).length;
-        return totalDays > 0 ? totalPresentStudents / totalDays : 0;
-      };
+      
   
       const averageStudentsPresentCurrent = calculateAverageAttendance(attendanceCountByDateCurrent);
   
@@ -534,6 +560,8 @@ app.get('/api/analytics/expenses', async (req, res) => {
   });
   
 
+  
+
   app.get('/api/analytics/studentAveragePerClass', async (req, res) => {
     const { attendanceSheet, attendanceWorkSheet } = req.query;
   
@@ -551,7 +579,7 @@ app.get('/api/analytics/expenses', async (req, res) => {
       }
   
       const attendanceRowsCurrent = await attendanceSheetDocCurrent.getRows();
-      
+  
       const extractData = (sheet, rows) => {
         const headers = sheet.headerValues.map(header => header.trim());
         return rows.map(row => {
@@ -564,9 +592,10 @@ app.get('/api/analytics/expenses', async (req, res) => {
       };
   
       const currentAttendanceData = extractData(attendanceSheetDocCurrent, attendanceRowsCurrent);
+      
   
       const groupedData = currentAttendanceData.reduce((acc, row) => {
-        if (row.Present === '1') {
+        if (row.Time && row.Time.length > 0) {
           if (!acc[row.Department]) {
             acc[row.Department] = {};
           }
@@ -602,6 +631,7 @@ app.get('/api/analytics/expenses', async (req, res) => {
       res.status(500).json({ error: 'Internal Server Error' });
     }
   });
+  
   
 
   
