@@ -6,7 +6,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { JWT } from 'google-auth-library';
 import { google } from 'googleapis';
-import serverless from 'serverless-http';
+ 
 
 dotenv.config();
 
@@ -182,6 +182,7 @@ app.get('/api/analytics/Studentsvsboxes', async (req, res) => {
 
     const attendanceData = extractData(attendanceSheetDoc, attendanceRows);
     const quotationData = extractData(quotationSheetDoc, quotationRows);
+    console.log("Attendance Data in Studentsvsboxes ",attendanceData);
 
     const attendanceCountByDate = attendanceData.reduce((acc, attendance) => {
       const date = attendance.Date;
@@ -205,13 +206,14 @@ app.get('/api/analytics/Studentsvsboxes', async (req, res) => {
         };
       });
 
-    const resultData = cleanedQuotationData.filter(quotation => 
-      (quotation.NoOfBoxes > 0 || !isNaN(quotation.NoOfBoxes)) || (quotation.NoOfPresents > 0 || !isNaN(quotation.NoOfPresents))
-    ).map(quotation => ({
-      Date: quotation.Date,
-      NoOfBoxes: quotation.NoOfBoxes,
-      NoOfPresents: quotation.NoOfPresents
-    }));
+      const resultData = cleanedQuotationData
+      .filter(quotation => quotation.NoOfBoxes > 0 && quotation.NoOfPresents > 0)
+      .map(quotation => ({
+        Date: quotation.Date,
+        NoOfBoxes: quotation.NoOfBoxes,
+        NoOfPresents: quotation.NoOfPresents
+      }));
+    console.log("Attendance Data in Studentsvsboxes ",attendanceCountByDate);
 
     res.json(resultData);
   } catch (error) {
@@ -592,7 +594,6 @@ app.get('/api/analytics/expenses', async (req, res) => {
       };
   
       const currentAttendanceData = extractData(attendanceSheetDocCurrent, attendanceRowsCurrent);
-      
   
       const groupedData = currentAttendanceData.reduce((acc, row) => {
         if (row.Time && row.Time.length > 0) {
@@ -620,10 +621,13 @@ app.get('/api/analytics/expenses', async (req, res) => {
   
       const averages = calculateAverage(groupedData);
   
-      const response = Object.entries(averages).map(([department, average]) => ({
-        department,
-        average: average.toFixed(2),
-      }));
+      // Convert to an array and sort by department name
+      const response = Object.entries(averages)
+        .map(([department, average]) => ({
+          department,
+          average: average.toFixed(2),
+        }))
+        .sort((a, b) => a.department.localeCompare(b.department)); // Sort alphabetically by department name
   
       res.json(response);
     } catch (error) {
@@ -631,6 +635,7 @@ app.get('/api/analytics/expenses', async (req, res) => {
       res.status(500).json({ error: 'Internal Server Error' });
     }
   });
+  
   
   
 
