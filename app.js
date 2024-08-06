@@ -7,7 +7,7 @@ import dotenv from 'dotenv';
 import { JWT } from 'google-auth-library';
 import { createClient } from 'redis';
 import { google } from 'googleapis';
- import {redisConfig} from './config/redisConfig.js';
+import { parse, isValid } from "date-fns";
  
 dotenv.config();
 
@@ -23,7 +23,7 @@ client.on('error', (err) => {
 client.connect().then(() => {
   console.log('Connected to Redis');
 });
-const CACHE_EXPIRATION_SECONDS = 3600; // Cache expiration time in seconds
+const CACHE_EXPIRATION_SECONDS = 10800;
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -379,7 +379,7 @@ app.get('/api/analytics/mealCost', async (req, res) => {
           // Filter out rows with invalid or empty dates and skip the last row (total)
           const validData = sheetData.filter((row, index, array) => {
             const isLastRow = index === array.length - 1;
-            const hasValidDate = row.Date && row.Date.trim() !== '' && row.Date !== 'TOTAL (PKR)';
+            const hasValidDate = row.Date && row.Date.trim() !== '' && row.Date !== 'TOTAL (PKR)'&&row.Date!=='*Sunday Excluded';
             return hasValidDate && !isLastRow;
           });
 
@@ -686,8 +686,281 @@ app.get('/api/analytics/mealCost', async (req, res) => {
   
   
   
-
+  app.get('/api/analytics/totalMealsServed', async (req, res) => {
+    const { quotationSheet } = req.query;
   
+    if (!quotationSheet) {
+      return res.status(400).json({ error: 'Sheet ID is required' });
+    }
+  
+    const cacheKey = `totalMealsServed:${quotationSheet}`;
+  
+    try {
+      // Check Redis cache first
+      const cachedData = await client.get(cacheKey);
+      if (cachedData) {
+        console.log('Serving data from cache');
+        return res.json(JSON.parse(cachedData));
+      }
+  
+      // Load the quotation sheet
+      const quotationDoc = new GoogleSpreadsheet(quotationSheet, serviceAccountAuth);
+      await quotationDoc.loadInfo();
+  
+      const sheetResults = {};
+  
+      // Iterate over all sheets
+      for (const sheetId in quotationDoc.sheetsById) {
+        const sheet = quotationDoc.sheetsById[sheetId];
+  
+        try {
+          await sheet.loadHeaderRow();
+          const headers = sheet.headerValues.map(header => header.trim());
+  
+          // Check if the sheet contains the "No. Of Boxes" column
+          if (headers.includes('No. Of Boxes')) {
+            const rows = await sheet.getRows();
+  
+            // Extract data and perform calculations
+            const extractData = (sheet, rows) => {
+              return rows.map(row => {
+                const rowData = {};
+                headers.forEach((header, index) => {
+                  rowData[header] = row._rawData[index]?.trim() || '';
+                });
+                return rowData;
+              });
+            };
+  
+            const sheetData = extractData(sheet, rows);
+  
+            // Filter out rows with invalid or empty dates and skip the last row (total)
+            const validData = sheetData.filter((row, index, array) => {
+              const isLastRow = index === array.length - 1;
+              const hasValidDate = row.Date && row.Date.trim() !== '' && row.Date !== 'TOTAL (PKR)'&&row.Date!=='*Sunday Excluded';
+              return hasValidDate && !isLastRow;
+            });
+  
+            // Sum up the "No. Of Boxes"
+            const totalCostMeals = validData.reduce((sum, row) => {
+              const cost = parseFloat(row['No. Of Boxes'].replace(/,/g, ''));
+              return sum + (isNaN(cost) ? 0 : cost);
+            }, 0);
+  
+            // Store the result with the sheet name
+            sheetResults[sheet.title] = totalCostMeals;
+          }
+        } catch (error) {
+          console.warn(`Error processing sheet ${sheet.title}:`, error.message);
+          // You may want to handle individual sheet errors differently, e.g., continue processing other sheets
+        }
+      }
+  console.log(sheetResults)
+      // Calculate the total sum of "No. Of Boxes" across all sheets
+      const totalMealsServed = Object.values(sheetResults).reduce((sum, value) => sum + value, 0);
+  
+      // Cache the result
+      await client.setEx(cacheKey, CACHE_EXPIRATION_SECONDS, JSON.stringify({ totalMealsServed }));
+  
+      // Return the result
+      console.log({ totalMealsServed });
+      res.json({ totalMealsServed });
+    } catch (error) {
+      console.error('Error accessing Google Sheets:', error);
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+  
+  app.get('/api/analytics/mealsServedLast7days', async (req, res) => {
+    const { quotationSheet, quotationWorkSheet } = req.query;
+  
+    if (!quotationSheet || !quotationWorkSheet) {
+      return res.status(400).json({ error: 'All sheet and worksheet IDs are required' });
+    }
+  
+    const cacheKey = `mealCostStudentAverage:${quotationSheet}:${quotationWorkSheet}`;
+  
+    try {
+      // Check if result is cached
+      const cachedResult = await client.get(cacheKey);
+      if (cachedResult) {
+        console.log("Serving data from cache");
+        return res.json(JSON.parse(cachedResult));
+      }
+  
+      // Load the quotation sheet
+      const quotationDoc = new GoogleSpreadsheet(quotationSheet, serviceAccountAuth);
+      await quotationDoc.loadInfo();
+  
+      const months = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+      ].map(month => month.toLowerCase());
+  
+      const getWorksheetData = async (worksheetDoc) => {
+        const rows = await worksheetDoc.getRows();
+        const headers = worksheetDoc.headerValues.map(header => header.trim());
+        return rows.map(row => {
+          const rowData = {};
+          headers.forEach((header, index) => {
+            rowData[header] = row._rawData[index]?.trim() || '';
+          });
+          return rowData;
+        });
+      };
+  
+      const filterValidData = (data) => {
+        return data.filter((row) => {
+          const hasValidDate = row.Date && row.Date.trim() !== '' && row.Date !== 'TOTAL (PKR)' && row.Date !== '*Sunday Excluded';
+          const hasValidBoxes = row['No. Of Boxes'] && parseFloat(row['No. Of Boxes'].replace(/,/g, '')) !== 0;
+          return hasValidDate && hasValidBoxes;
+        });
+      };
+  
+      const collectLast7DaysData = async (doc, initialWorksheetDoc, months) => {
+        let data = [];
+        let worksheetDoc = initialWorksheetDoc;
+        let monthIndex = months.indexOf(worksheetDoc.title.toLowerCase());
+  
+        while (data.length < 7 && monthIndex >= 0) {
+          const currentData = await getWorksheetData(worksheetDoc);
+          const validData = filterValidData(currentData);
+          data = [...validData.slice(-7), ...data];
+  
+          if (data.length >= 7) break;
+  
+          // Move to the previous month
+          monthIndex = (monthIndex === 0) ? 11 : monthIndex - 1;
+          const previousWorkSheetName = months[monthIndex];
+          worksheetDoc = doc.sheetsByIndex.find(sheet => sheet.title.toLowerCase() === previousWorkSheetName);
+  
+          if (!worksheetDoc) break;
+        }
+  
+        return data.slice(-7);
+      };
+  
+      // Get the current worksheet
+      const currentExpensesSheetDoc = quotationDoc.sheetsById[quotationWorkSheet];
+      if (!currentExpensesSheetDoc) {
+        return res.status(404).json({ error: 'Current month expenses worksheet not found' });
+      }
+  
+      const last7DaysData = await collectLast7DaysData(quotationDoc, currentExpensesSheetDoc, months);
+  
+      const result = {
+        last7DaysMeals: last7DaysData.map(row => ({
+          date: row.Date,
+          mealName: row['Meal Name'],
+          boxes: row['No. Of Boxes']
+        })),
+        dataAvailable: last7DaysData.length === 7
+      };
+  
+      // Cache the result
+      await client.setEx(cacheKey, CACHE_EXPIRATION_SECONDS, JSON.stringify(result));
+  
+      // Return the result
+      res.json(result);
+    } catch (error) {
+      console.error('Error accessing Google Sheets:', error);
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+  
+
+  app.get('/api/analytics/averageAttendanceUntilNow', async (req, res) => {
+    const { attendanceSheet } = req.query;
+  
+    if (!attendanceSheet) {
+      return res.status(400).json({ error: 'Attendance sheet ID is required' });
+    }
+  
+    const cacheKey = `averageAttendanceUntilNow:${attendanceSheet}`;
+  
+    try {
+      // Check if result is cached
+      const cachedResult = await client.get(cacheKey);
+      // if (cachedResult) {
+      //   console.log("Serving data from cache");
+      //   return res.json(JSON.parse(cachedResult));
+      // }
+  
+      // Load the attendance sheet
+      const attendanceDoc = new GoogleSpreadsheet(attendanceSheet, serviceAccountAuth);
+      await attendanceDoc.loadInfo();
+  
+      const allAttendanceSheets = attendanceDoc.sheetsByIndex;
+  
+      const extractData = (sheet, rows) => {
+        const headers = sheet.headerValues.map(header => header.trim());
+        return rows.map(row => {
+          const rowData = {};
+          headers.forEach((header, index) => {
+            rowData[header] = row._rawData[index]?.trim() || '';
+          });
+          return rowData;
+        });
+      };
+  
+      const countStudentsPresent = (data) => {
+        return data.reduce((acc, attendance) => {
+          const date = attendance.Date;
+          const parsedDate = parse(date, 'MM/dd/yyyy', new Date());
+          if (attendance.Time && attendance.Time.length > 0 && isValid(parsedDate)) {
+            const formattedDate = parsedDate.toISOString().split('T')[0]; // Normalize date to YYYY-MM-DD
+            if (!acc[formattedDate]) {
+              acc[formattedDate] = 0;
+            }
+            acc[formattedDate]++;
+          }
+          return acc;
+        }, {});
+      };
+  
+      const calculateAverageAttendance = (attendanceCountByDate) => {
+        const { totalPresentStudents, daysWithAttendance } = Object.entries(attendanceCountByDate).reduce((acc, [date, count]) => {
+          if (count > 0) {
+            acc.totalPresentStudents += count;
+            acc.daysWithAttendance += 1;
+          }
+          return acc;
+        }, { totalPresentStudents: 0, daysWithAttendance: 0 });
+  
+        return daysWithAttendance > 0 ? totalPresentStudents / daysWithAttendance : 0;
+      };
+  
+      let totalPresentStudents = 0;
+      let totalDaysWithAttendance = 0;
+  
+      for (const sheet of allAttendanceSheets) {
+        const attendanceRows = await sheet.getRows();
+        const attendanceData = extractData(sheet, attendanceRows);
+        const attendanceCountByDate = countStudentsPresent(attendanceData);
+  console.log("count present students ",attendanceCountByDate);
+        const averageAttendanceForSheet = calculateAverageAttendance(attendanceCountByDate);
+        totalPresentStudents += Object.values(attendanceCountByDate).reduce((sum, count) => sum + count, 0);
+        totalDaysWithAttendance += Object.keys(attendanceCountByDate).length;
+      }
+  
+      const averageAttendanceUntilNow = totalDaysWithAttendance > 0 ? totalPresentStudents / totalDaysWithAttendance : 0;
+  
+      const result = {
+        averageAttendanceUntilNow,
+        totalPresentStudents,
+        totalDaysWithAttendance
+      };
+  
+      // Cache the result
+      await client.setEx(cacheKey, CACHE_EXPIRATION_SECONDS, JSON.stringify(result));
+  
+      // Return the result
+      res.json(result);
+    } catch (error) {
+      console.error('Error accessing Google Sheets:', error);
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
   
   
 export default app;
