@@ -8,7 +8,7 @@ import { JWT } from 'google-auth-library';
 import { createClient } from 'redis';
 import { google } from 'googleapis';
 import { parse, isValid } from "date-fns";
- 
+
 dotenv.config();
 
 const client = createClient({
@@ -177,7 +177,13 @@ app.get('/api/analytics/Studentsvsboxes', async (req, res) => {
 
     const attendanceDoc = new GoogleSpreadsheet(attendanceSheet, serviceAccountAuth);
     await attendanceDoc.loadInfo();
-    const attendanceSheetDoc = attendanceDoc.sheetsById[Number(attendanceWorkSheet)];
+    const cleanTitle = (title) => {
+      return title.trim().replace(/\s+/g, ' ');
+    };
+    const quotationWorkShet=cleanTitle(quotationWorkSheet);
+    const attendanceWorkShet=cleanTitle(attendanceWorkSheet);
+    const attendanceWorkSheetLower = attendanceWorkShet.toLowerCase();
+    const attendanceSheetDoc = attendanceDoc.sheetsByTitle[Object.keys(attendanceDoc.sheetsByTitle).find(title => title.toLowerCase() === attendanceWorkSheetLower)];
     if (!attendanceSheetDoc) {
       return res.status(404).json({ error: 'Attendance worksheet not found' });
     }
@@ -185,7 +191,9 @@ app.get('/api/analytics/Studentsvsboxes', async (req, res) => {
 
     const quotationDoc = new GoogleSpreadsheet(quotationSheet, serviceAccountAuth);
     await quotationDoc.loadInfo();
-    const quotationSheetDoc = quotationDoc.sheetsById[quotationWorkSheet];
+    
+    const quotationWorkSheetLower = quotationWorkShet.toLowerCase();
+    const quotationSheetDoc = quotationDoc.sheetsByTitle[Object.keys(quotationDoc.sheetsByTitle).find(title => title.toLowerCase() === quotationWorkSheetLower)];
     if (!quotationSheetDoc) {
       return res.status(404).json({ error: 'Quotation worksheet not found' });
     }
@@ -246,6 +254,7 @@ app.get('/api/analytics/Studentsvsboxes', async (req, res) => {
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
+
 
 
 
@@ -423,16 +432,18 @@ app.get('/api/analytics/mealCost', async (req, res) => {
     "July", "August", "September", "October", "November", "December"
   ].map(month => month.toLowerCase());
   
-  app.get('/api/analytics/mealCostStudentAverage', async (req, res) => {
+  app.get('/api/analytics/AverageStudentVsBoxes', async (req, res) => {
     const { quotationSheet, quotationWorkSheet, attendanceSheet, attendanceWorkSheet } = req.query;
   
     if (!quotationSheet || !quotationWorkSheet || !attendanceSheet || !attendanceWorkSheet) {
-      return res.status(400).json({ error: 'All sheet and worksheet IDs are required' });
+      return res.status(400).json({ error: 'All sheet and worksheet titles are required' });
     }
   
     const cacheKey = `mealCostStudentAverage:${quotationSheet}:${quotationWorkSheet}:${attendanceSheet}:${attendanceWorkSheet}`;
   
     try {
+   
+  
       // Check if result is cached
       const cachedResult = await client.get(cacheKey);
       if (cachedResult) {
@@ -446,26 +457,48 @@ app.get('/api/analytics/mealCost', async (req, res) => {
       const attendanceDoc = new GoogleSpreadsheet(attendanceSheet, serviceAccountAuth);
       await attendanceDoc.loadInfo();
   
-      // Get the current worksheet
-      const currentExpensesSheetDoc = quotationDoc.sheetsById[quotationWorkSheet];
-      if (!currentExpensesSheetDoc) {
-        return res.status(404).json({ error: 'Current month expenses worksheet not found' });
-      }
+      // Function to extract month and year from title
+      const extractMonthAndYear = (title) => {
+        const trimmedTitle = title.trim().replace(/\s{2,}/g, ' '); // Remove extra spaces
+        const [month, year] = trimmedTitle.split(' ');
+        return { month: month.toLowerCase(), year: parseInt(year, 10) };
+      };
+      const cleanTitle = (title) => {
+        return title.trim().replace(/\s+/g, ' ');
+      };
+      const quotationWorkShet=cleanTitle(quotationWorkSheet);
+      const attendanceWorkShet=cleanTitle(attendanceWorkSheet);
+      const { month: currentMonthName, year: currentYear } = extractMonthAndYear(quotationWorkShet);
+      console.log("month and year ",currentMonthName,currentYear);
   
-      const currentMonthName = currentExpensesSheetDoc.title.toLowerCase();
-      const currentMonthIndex = months.indexOf(currentMonthName);
+      
+            // Get month index
+      const currentMonthIndex = months.indexOf(currentMonthName.toLowerCase());
       if (currentMonthIndex === -1) {
         return res.status(400).json({ error: 'Invalid month name for current worksheet' });
       }
   
-      const previousMonthIndex = (currentMonthIndex === 0) ? 11 : currentMonthIndex - 1;
-      const previousWorkSheetName = months[previousMonthIndex];
-  
+      // Calculate previous month index and year
+      let previousMonthIndex = currentMonthIndex - 1;
+      let previousYear = currentYear;
+      if (previousMonthIndex < 0) {
+        previousMonthIndex = 11;
+        previousYear -= 1;
+      }
+      const previousWorkSheetName = `${months[previousMonthIndex]} ${previousYear}`;
+  console.log("previous " ,previousWorkSheetName)
       const allQuotationSheets = quotationDoc.sheetsByIndex;
-      let previousExpensesSheetDoc = allQuotationSheets.find(sheet => sheet.title.toLowerCase() === previousWorkSheetName);
+      const allAttendanceSheets = attendanceDoc.sheetsByIndex;
   
-      if (!previousExpensesSheetDoc) {
-        return res.status(404).json({ error: 'Previous month expenses worksheet not found' });
+      // Search for current and previous worksheets by title
+      const currentExpensesSheetDoc = allQuotationSheets.find(sheet => sheet.title.toLowerCase() === quotationWorkShet.toLowerCase());
+      const previousExpensesSheetDoc = allQuotationSheets.find(sheet => sheet.title.toLowerCase() === previousWorkSheetName.toLowerCase());
+  
+      const attendanceSheetDocCurrent = allAttendanceSheets.find(sheet => sheet.title.toLowerCase() === attendanceWorkShet.toLowerCase());
+      const previousAttendanceSheetDoc = allAttendanceSheets.find(sheet => sheet.title.toLowerCase() === previousWorkSheetName.toLowerCase());
+  
+      if (!currentExpensesSheetDoc || !previousExpensesSheetDoc || !attendanceSheetDocCurrent) {
+        return res.status(404).json({ error: 'Worksheet not found' });
       }
   
       const currentExpensesRows = await currentExpensesSheetDoc.getRows();
@@ -511,15 +544,6 @@ app.get('/api/analytics/mealCost', async (req, res) => {
   
       const averageBoxesCurrent = calculateAverageBoxes(validCurrentData);
       const averageBoxesPrevious = calculateAverageBoxes(validPreviousData);
-  
-      const allAttendanceSheets = attendanceDoc.sheetsByIndex;
-      const attendanceSheetDocCurrent = attendanceDoc.sheetsById[Number(attendanceWorkSheet)];
-      if (!attendanceSheetDocCurrent) {
-        return res.status(404).json({ error: 'Current attendance worksheet not found' });
-      }
-  
-      const previousAttendanceWorkSheetName = months[previousMonthIndex];
-      let previousAttendanceSheetDoc = allAttendanceSheets.find(sheet => sheet.title.toLowerCase() === previousAttendanceWorkSheetName);
   
       const countStudentsPresent = (data) => {
         return data.reduce((acc, attendance) => {
@@ -577,16 +601,21 @@ app.get('/api/analytics/mealCost', async (req, res) => {
       const averageStudentsPresentCurrent = calculateAverageAttendance(attendanceCountByDateCurrent);
   
       // Group data by worksheet
+      const capitalizeFirstLetter = (string) => {
+        return string.charAt(0).toUpperCase() + string.slice(1);
+      };
+      
       const result = {
-        [currentMonthName]: {
+        [`${capitalizeFirstLetter(currentMonthName)} ${currentYear}`]: {
           averageBoxes: averageBoxesCurrent,
           averageStudentsPresent: averageStudentsPresentCurrent
         },
-        [previousWorkSheetName]: {
+        [`${capitalizeFirstLetter(previousWorkSheetName)}`]: {
           averageBoxes: averageBoxesPrevious,
           averageStudentsPresent: averageStudentsPresentPrevious
         }
       };
+      
   
       // Cache the result
       await client.setEx(cacheKey, CACHE_EXPIRATION_SECONDS, JSON.stringify(result));
@@ -598,6 +627,7 @@ app.get('/api/analytics/mealCost', async (req, res) => {
       res.status(500).json({ error: 'Internal Server Error' });
     }
   });
+  
   
   
 
@@ -623,7 +653,19 @@ app.get('/api/analytics/mealCost', async (req, res) => {
       const attendanceDoc = new GoogleSpreadsheet(attendanceSheet, serviceAccountAuth);
       await attendanceDoc.loadInfo();
   
-      const attendanceSheetDocCurrent = attendanceDoc.sheetsById[Number(attendanceWorkSheet)];
+      // Function to clean the title by removing leading, trailing, and extra spaces
+      const cleanTitle = (title) => {
+        return title.trim().replace(/\s+/g, ' ');
+      };
+  
+      // Clean and convert the attendanceWorkSheet title to lowercase
+      const attendanceWorkSheetCleaned = cleanTitle(attendanceWorkSheet).toLowerCase();
+  
+      // Find the worksheet by title in a case-insensitive manner
+      const attendanceSheetDocCurrent = attendanceDoc.sheetsByIndex.find(sheet => 
+        sheet.title.toLowerCase() === attendanceWorkSheetCleaned
+      );
+  
       if (!attendanceSheetDocCurrent) {
         return res.status(404).json({ error: 'Current attendance worksheet not found' });
       }
@@ -687,6 +729,7 @@ app.get('/api/analytics/mealCost', async (req, res) => {
       res.status(500).json({ error: 'Internal Server Error' });
     }
   });
+  
   
   
   
@@ -801,6 +844,10 @@ app.get('/api/analytics/mealCost', async (req, res) => {
         "July", "August", "September", "October", "November", "December"
       ].map(month => month.toLowerCase());
   
+      const cleanTitle = (title) => {
+        return title.trim().replace(/\s+/g, ' ').toLowerCase();
+      };
+  
       const getWorksheetData = async (worksheetDoc) => {
         const rows = await worksheetDoc.getRows();
         const headers = worksheetDoc.headerValues.map(header => header.trim());
@@ -824,9 +871,9 @@ app.get('/api/analytics/mealCost', async (req, res) => {
       const collectLast7DaysData = async (doc, initialWorksheetDoc, months) => {
         let data = [];
         let worksheetDoc = initialWorksheetDoc;
-        let monthIndex = months.indexOf(worksheetDoc.title.toLowerCase());
+        let currentYear = new Date().getFullYear();
   
-        while (data.length < 7 && monthIndex >= 0) {
+        while (data.length < 7) {
           const currentData = await getWorksheetData(worksheetDoc);
           const validData = filterValidData(currentData);
           data = [...validData.slice(-7), ...data];
@@ -834,9 +881,18 @@ app.get('/api/analytics/mealCost', async (req, res) => {
           if (data.length >= 7) break;
   
           // Move to the previous month
-          monthIndex = (monthIndex === 0) ? 11 : monthIndex - 1;
-          const previousWorkSheetName = months[monthIndex];
-          worksheetDoc = doc.sheetsByIndex.find(sheet => sheet.title.toLowerCase() === previousWorkSheetName);
+          let monthIndex = months.indexOf(cleanTitle(worksheetDoc.title).split(' ')[0]);
+          if (monthIndex === -1) break;
+  
+          if (monthIndex === 0) {
+            monthIndex = 11;
+            currentYear--;
+          } else {
+            monthIndex--;
+          }
+  
+          const previousWorkSheetName = `${months[monthIndex]} ${currentYear}`;
+          worksheetDoc = doc.sheetsByIndex.find(sheet => cleanTitle(sheet.title) === cleanTitle(previousWorkSheetName));
   
           if (!worksheetDoc) break;
         }
@@ -844,8 +900,11 @@ app.get('/api/analytics/mealCost', async (req, res) => {
         return data.slice(-7);
       };
   
-      // Get the current worksheet
-      const currentExpensesSheetDoc = quotationDoc.sheetsById[quotationWorkSheet];
+      // Clean and convert the quotationWorkSheet title to lowercase
+      const cleanedQuotationWorkSheet = cleanTitle(quotationWorkSheet);
+  
+      // Find the current worksheet by title in a case-insensitive manner
+      const currentExpensesSheetDoc = quotationDoc.sheetsByIndex.find(sheet => cleanTitle(sheet.title) === cleanedQuotationWorkSheet);
       if (!currentExpensesSheetDoc) {
         return res.status(404).json({ error: 'Current month expenses worksheet not found' });
       }
@@ -871,6 +930,8 @@ app.get('/api/analytics/mealCost', async (req, res) => {
       res.status(500).json({ error: 'Internal Server Error' });
     }
   });
+  
+  
   
 
   app.get('/api/analytics/averageAttendanceUntilNow', async (req, res) => {
