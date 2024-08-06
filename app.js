@@ -881,10 +881,10 @@ app.get('/api/analytics/mealCost', async (req, res) => {
     try {
       // Check if result is cached
       const cachedResult = await client.get(cacheKey);
-      // if (cachedResult) {
-      //   console.log("Serving data from cache");
-      //   return res.json(JSON.parse(cachedResult));
-      // }
+      if (cachedResult) {
+        console.log("Serving data from cache");
+        return res.json(JSON.parse(cachedResult));
+      }
   
       // Load the attendance sheet
       const attendanceDoc = new GoogleSpreadsheet(attendanceSheet, serviceAccountAuth);
