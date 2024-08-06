@@ -23,7 +23,7 @@ client.on('error', (err) => {
 client.connect().then(() => {
   console.log('Connected to Redis');
 });
-const CACHE_EXPIRATION_SECONDS = 10800;
+const CACHE_EXPIRATION_SECONDS = 43200; // 12 hours
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -576,13 +576,16 @@ app.get('/api/analytics/mealCost', async (req, res) => {
   
       const averageStudentsPresentCurrent = calculateAverageAttendance(attendanceCountByDateCurrent);
   
+      // Group data by worksheet
       const result = {
-        currentWorksheet: currentMonthName,
-        previousWorksheet: previousWorkSheetName,
-        averageBoxesCurrent,
-        averageBoxesPrevious,
-        averageStudentsPresentCurrent,
-        averageStudentsPresentPrevious
+        [currentMonthName]: {
+          averageBoxes: averageBoxesCurrent,
+          averageStudentsPresent: averageStudentsPresentCurrent
+        },
+        [previousWorkSheetName]: {
+          averageBoxes: averageBoxesPrevious,
+          averageStudentsPresent: averageStudentsPresentPrevious
+        }
       };
   
       // Cache the result
@@ -595,6 +598,7 @@ app.get('/api/analytics/mealCost', async (req, res) => {
       res.status(500).json({ error: 'Internal Server Error' });
     }
   });
+  
   
 
   
