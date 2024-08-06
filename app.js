@@ -916,15 +916,16 @@ app.get('/api/analytics/mealCost', async (req, res) => {
           date: row.Date,
           mealName: row['Meal Name'],
           boxes: row['No. Of Boxes']
-        })),
+        })).reverse(), // Reverse the array here
         dataAvailable: last7DaysData.length === 7
       };
-  
+      
       // Cache the result
       await client.setEx(cacheKey, CACHE_EXPIRATION_SECONDS, JSON.stringify(result));
-  
+      
       // Return the result
       res.json(result);
+      
     } catch (error) {
       console.error('Error accessing Google Sheets:', error);
       res.status(500).json({ error: 'Internal Server Error' });
