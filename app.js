@@ -454,13 +454,13 @@ app.get('/api/analytics/mealCost', async (req, res) => {
         // You may want to handle individual sheet errors differently, e.g., continue processing other sheets
       }
     }
-
+const optimizedResults=sheetResults.slice(0,12);
     // Cache the result
-    await client.setEx(cacheKey, CACHE_EXPIRATION_SECONDS, JSON.stringify(sheetResults));
+    await client.setEx(cacheKey, CACHE_EXPIRATION_SECONDS, JSON.stringify(optimizedResults));
 
     // Return the result
-    console.log(sheetResults);
-    res.json(sheetResults);
+    console.log(optimizedResults);
+    res.json(optimizedResults);
   } catch (error) {
     console.error('Error accessing Google Sheets:', error);
     res.status(500).json({ error: 'Internal Server Error' });
