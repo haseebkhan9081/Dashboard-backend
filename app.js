@@ -7,7 +7,8 @@ import dotenv from 'dotenv';
 import { JWT } from 'google-auth-library';
 import { createClient } from 'redis';
 import { google } from 'googleapis';
-import { parse, isValid } from "date-fns";
+import { parse, isValid,format } from "date-fns";
+import {enUS} from "date-fns/locale";
 
 dotenv.config();
 
@@ -395,10 +396,10 @@ app.get('/api/analytics/mealCost', async (req, res) => {
   try {
     // Check Redis cache first
     const cachedData = await client.get(cacheKey);
-    if (cachedData) {
-      console.log('Serving data from cache');
-      return res.json(JSON.parse(cachedData));
-    }
+    // if (cachedData) {
+    //   console.log('Serving data from cache');
+    //   return res.json(JSON.parse(cachedData));
+    // }
 
     // Load the quotation sheet
     const quotationDoc = new GoogleSpreadsheet(quotationSheet, serviceAccountAuth);
@@ -454,13 +455,13 @@ app.get('/api/analytics/mealCost', async (req, res) => {
         // You may want to handle individual sheet errors differently, e.g., continue processing other sheets
       }
     }
-const optimizedResults=sheetResults.slice(0,12);
+ 
     // Cache the result
-    await client.setEx(cacheKey, CACHE_EXPIRATION_SECONDS, JSON.stringify(optimizedResults));
+    await client.setEx(cacheKey, CACHE_EXPIRATION_SECONDS, JSON.stringify(sheetResults));
 
     // Return the result
-    console.log(optimizedResults);
-    res.json(optimizedResults);
+    console.log(sheetResults);
+    res.json(sheetResults);
   } catch (error) {
     console.error('Error accessing Google Sheets:', error);
     res.status(500).json({ error: 'Internal Server Error' });
@@ -875,6 +876,10 @@ console.log("Returning results:", finalResults);
   
   
   
+ 
+
+ 
+
   app.get('/api/analytics/totalMealsServed', async (req, res) => {
     const { quotationSheet } = req.query;
   
@@ -897,6 +902,7 @@ console.log("Returning results:", finalResults);
       await quotationDoc.loadInfo();
   
       const sheetResults = {};
+      let latestDate = null;
   
       // Iterate over all sheets
       for (const sheetId in quotationDoc.sheetsById) {
@@ -929,7 +935,21 @@ console.log("Returning results:", finalResults);
               const date = row.Date;
               const parsedDate = parse(date, 'MM/dd/yyyy', new Date());
               const hasValidDate = isValid(parsedDate) && date.trim() !== '' && date !== 'TOTAL (PKR)' && date !== '*Sunday Excluded';
-              return hasValidDate && !isLastRow;
+              const hasValidBoxes = row['No. Of Boxes'].trim() !== '';
+              return hasValidDate && hasValidBoxes && !isLastRow;
+            });
+  
+            console.log(`Valid data for sheet ${sheet.title}:`, validData);
+  
+            // Find the latest date
+            validData.forEach(row => {
+              const date = row.Date;
+              const parsedDate = parse(date, 'MM/dd/yyyy', new Date());
+              console.log(`Parsed date for row ${JSON.stringify(row)}:`, parsedDate);
+              if (isValid(parsedDate) && (!latestDate || parsedDate > latestDate)) {
+                latestDate = parsedDate;
+                console.log(`Updated latest date:`, latestDate);
+              }
             });
   
             // Sum up the "No. Of Boxes"
@@ -946,21 +966,25 @@ console.log("Returning results:", finalResults);
           // You may want to handle individual sheet errors differently, e.g., continue processing other sheets
         }
       }
-  console.log(sheetResults)
+  
       // Calculate the total sum of "No. Of Boxes" across all sheets
       const totalMealsServed = Object.values(sheetResults).reduce((sum, value) => sum + value, 0);
   
       // Cache the result
-      await client.setEx(cacheKey, CACHE_EXPIRATION_SECONDS, JSON.stringify({ totalMealsServed }));
-  
+      const formattedLatestDate = latestDate ? format(latestDate, 'dd/MMMM/yyyy', { locale: enUS }) : null;
+      
+      await client.setEx(cacheKey, CACHE_EXPIRATION_SECONDS, JSON.stringify({ totalMealsServed, formattedLatestDate }));
       // Return the result
-      console.log({ totalMealsServed });
-      res.json({ totalMealsServed });
+      console.log({ totalMealsServed, formattedLatestDate });
+      res.json({ totalMealsServed, formattedLatestDate });
     } catch (error) {
       console.error('Error accessing Google Sheets:', error);
       res.status(500).json({ error: 'Internal Server Error' });
     }
   });
+  
+
+
   
   app.get('/api/analytics/mealsServedLast7days', async (req, res) => {
     const { quotationSheet, quotationWorkSheet } = req.query;
