@@ -157,7 +157,8 @@ app.get('/api/sheet/worksheet/data', async (req, res) => {
   }
 });
 
-// Endpoint to fetch analytics data
+ 
+
 app.get('/api/analytics/Studentsvsboxes', async (req, res) => {
   const { attendanceSheet, quotationSheet, attendanceWorkSheet, quotationWorkSheet } = req.query;
 
@@ -180,8 +181,8 @@ app.get('/api/analytics/Studentsvsboxes', async (req, res) => {
     const cleanTitle = (title) => {
       return title.trim().replace(/\s+/g, ' ');
     };
-    const quotationWorkShet=cleanTitle(quotationWorkSheet);
-    const attendanceWorkShet=cleanTitle(attendanceWorkSheet);
+    const quotationWorkShet = cleanTitle(quotationWorkSheet);
+    const attendanceWorkShet = cleanTitle(attendanceWorkSheet);
     const attendanceWorkSheetLower = attendanceWorkShet.toLowerCase();
     const attendanceSheetDoc = attendanceDoc.sheetsByTitle[Object.keys(attendanceDoc.sheetsByTitle).find(title => title.toLowerCase() === attendanceWorkSheetLower)];
     if (!attendanceSheetDoc) {
@@ -215,7 +216,8 @@ app.get('/api/analytics/Studentsvsboxes', async (req, res) => {
 
     const attendanceCountByDate = attendanceData.reduce((acc, attendance) => {
       const date = attendance.Date;
-      if (attendance.Time && attendance.Time.length > 0) {
+      const parsedDate = parse(date, 'MM/dd/yyyy', new Date());
+      if (isValid(parsedDate) && attendance.Time && attendance.Time.length > 0) {
         if (!acc[date]) {
           acc[date] = 0;
         }
@@ -225,7 +227,11 @@ app.get('/api/analytics/Studentsvsboxes', async (req, res) => {
     }, {});
 
     const cleanedQuotationData = quotationData
-      .filter(quotation => quotation.Date && isValidDate(quotation.Date) && !quotation.Date.includes('TOTAL') && !quotation.Date.includes('Sunday Excluded'))
+      .filter(quotation => {
+        const date = quotation.Date;
+        const parsedDate = parse(date, 'MM/dd/yyyy', new Date());
+        return isValid(parsedDate) && !date.includes('TOTAL') && !date.includes('Sunday Excluded');
+      })
       .map(quotation => {
         const date = quotation.Date;
         const noOfBoxes = quotation['No. Of Boxes'];
@@ -258,14 +264,20 @@ app.get('/api/analytics/Studentsvsboxes', async (req, res) => {
 
 
 
-app.get('/api/analytics/expenses', async (req, res) => {
-  const { quotationSheet, expensesWorkSheet } = req.query;
 
-  if (!quotationSheet || !expensesWorkSheet) {
-    return res.status(400).json({ error: 'All sheet and worksheet IDs are required' });
+app.get('/api/analytics/expenses', async (req, res) => {
+  const { quotationSheet, expensesWorkSheet, month} = req.query;
+console.log("data for request",quotationSheet,expensesWorkSheet,month)
+  if (!quotationSheet || !expensesWorkSheet || !month) {
+    return res.status(400).json({ error: 'All sheet and worksheet IDs and month are required' });
   }
 
-  const cacheKey = `expenses:${quotationSheet}:${expensesWorkSheet}`;
+  const cleanMonthName = (month) => {
+    return month.trim().replace(/\s+/g, ' ').toLowerCase();
+  };
+
+  const cleanMonth = cleanMonthName(month);
+  const cacheKey = `expenses:${quotationSheet}:${expensesWorkSheet}:${cleanMonth}`;
 
   try {
     // Check Redis cache first
@@ -286,44 +298,66 @@ app.get('/api/analytics/expenses', async (req, res) => {
     }
     const expensesRows = await expensesSheetDoc.getRows();
 
-    // Extract headers and convert rows to JSON for all sheets
-    const extractData = (sheet, rows) => {
-      const headers = sheet.headerValues;
-      return rows.map(row => {
-        const rowData = {};
-        headers.forEach((header, index) => {
-          rowData[header.trim()] = row._rawData[index]?.trim() || '';
-        });
-        return rowData;
-      });
-    };
+    // Find the column indices for the specified month
+    const monthColumnStartIndex = expensesSheetDoc.headerValues.findIndex(header => cleanMonthName(header) === cleanMonth);
+    if (monthColumnStartIndex === -1) {
+      return res.status(404).json({ error: `Month ${month} not found in the worksheet` });
+    }
 
-    const expensesData = extractData(expensesSheetDoc, expensesRows);
-    expensesData.pop(); // Remove any unwanted last entry if necessary
+    // Adjust the end column index for the merged header
+    const monthColumnEndIndex = monthColumnStartIndex + 1; // Assuming next column contains salary data
 
-    // Initialize sums
+    console.log('Month Column Start Index:', monthColumnStartIndex);
+    console.log('Month Column End Index:', monthColumnEndIndex);
+
+    // Initialize sums for the month
     let salarySum = 0;
     let otherExpensesSum = 0;
 
     // Process the data to separate salaries from other expenses
-    expensesData.forEach(item => {
-      const salary = parseFloat(item.Salary.replace(/,/g, '').trim()); // Remove commas, trim whitespace, and convert to number
-      if (isNaN(salary)) return; // Skip if salary is not a valid number
+    expensesRows.forEach(row => {
+      // Use only the relevant columns
+      const name = row._rawData[monthColumnStartIndex]?.trim().toLowerCase();
+      const salary = row._rawData[monthColumnEndIndex]?.trim();
 
-      const name = item['Teachers Name'].trim().toLowerCase(); // Trim whitespace and convert to lowercase
-      if (name.includes('cleaning') || 
-          name.includes('wifi') ||
-          name.includes('ice')) {
-        otherExpensesSum += salary;
+      // Log the values for debugging
+      console.log('Row Data:', row._rawData);
+      console.log('Name Column Value:', name);
+      console.log('Salary Column Value:', salary);
+
+      // Exclude rows where the name is "total" or salary is invalid
+      if (!name || name === 'total' || !salary || isNaN(parseFloat(salary.replace(/,/g, '').trim()))) {
+        console.log('Skipping row due to invalid data:', JSON.stringify(row._rawData));
+        return;
+      }
+
+      console.log('Processing row:', JSON.stringify(row._rawData));
+      console.log('Name:', name);
+      console.log('Salary:', salary);
+
+      const parsedSalary = parseFloat(salary.replace(/,/g, '').trim());
+
+      if (name.includes('cleaning') || name.includes('wifi') || name.includes('ice')) {
+        otherExpensesSum += parsedSalary;
       } else {
-        salarySum += salary;
+        salarySum += parsedSalary;
       }
     });
 
-    const resultData = {
-      salarySum,
-      otherExpensesSum,
+    console.log('Salary Sum:', salarySum);
+    console.log('Other Expenses Sum:', otherExpensesSum);
+    const capitalizeFirstLetter = (string) => {
+      return string.charAt(0).toUpperCase() + string.slice(1);
     };
+    
+    // Grouped data structure
+    const resultData = {
+      [capitalizeFirstLetter(cleanMonth)]: {
+        salarySum,
+        otherExpensesSum
+      }
+    };
+    
 
     // Cache the result data in Redis
     await client.setEx(cacheKey, CACHE_EXPIRATION_SECONDS, JSON.stringify(resultData));
@@ -336,6 +370,19 @@ app.get('/api/analytics/expenses', async (req, res) => {
   }
 });
 
+
+
+
+
+
+
+
+
+
+
+
+ 
+
 app.get('/api/analytics/mealCost', async (req, res) => {
   const { quotationSheet } = req.query;
 
@@ -345,7 +392,6 @@ app.get('/api/analytics/mealCost', async (req, res) => {
 
   const cacheKey = `mealCost:${quotationSheet}`;
    
-
   try {
     // Check Redis cache first
     const cachedData = await client.get(cacheKey);
@@ -388,7 +434,9 @@ app.get('/api/analytics/mealCost', async (req, res) => {
           // Filter out rows with invalid or empty dates and skip the last row (total)
           const validData = sheetData.filter((row, index, array) => {
             const isLastRow = index === array.length - 1;
-            const hasValidDate = row.Date && row.Date.trim() !== '' && row.Date !== 'TOTAL (PKR)'&&row.Date!=='*Sunday Excluded';
+            const date = row.Date;
+            const parsedDate = parse(date, 'MM/dd/yyyy', new Date());
+            const hasValidDate = isValid(parsedDate) && date.trim() !== '' && date !== 'TOTAL (PKR)' && date !== '*Sunday Excluded';
             return hasValidDate && !isLastRow;
           });
 
@@ -418,6 +466,7 @@ app.get('/api/analytics/mealCost', async (req, res) => {
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
+
 
   
   
@@ -877,7 +926,9 @@ console.log("Returning results:", finalResults);
             // Filter out rows with invalid or empty dates and skip the last row (total)
             const validData = sheetData.filter((row, index, array) => {
               const isLastRow = index === array.length - 1;
-              const hasValidDate = row.Date && row.Date.trim() !== '' && row.Date !== 'TOTAL (PKR)'&&row.Date!=='*Sunday Excluded';
+              const date = row.Date;
+              const parsedDate = parse(date, 'MM/dd/yyyy', new Date());
+              const hasValidDate = isValid(parsedDate) && date.trim() !== '' && date !== 'TOTAL (PKR)' && date !== '*Sunday Excluded';
               return hasValidDate && !isLastRow;
             });
   
@@ -955,7 +1006,9 @@ console.log("Returning results:", finalResults);
   
       const filterValidData = (data) => {
         return data.filter((row) => {
-          const hasValidDate = row.Date && row.Date.trim() !== '' && row.Date !== 'TOTAL (PKR)' && row.Date !== '*Sunday Excluded';
+          const date = row.Date;
+          const parsedDate = parse(date, 'MM/dd/yyyy', new Date());
+          const hasValidDate = isValid(parsedDate) && date.trim() !== '' && date !== 'TOTAL (PKR)' && date !== '*Sunday Excluded';
           const hasValidBoxes = row['No. Of Boxes'] && parseFloat(row['No. Of Boxes'].replace(/,/g, '')) !== 0;
           return hasValidDate && hasValidBoxes;
         });
