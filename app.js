@@ -24,7 +24,7 @@ client.on('error', (err) => {
 client.connect().then(() => {
   console.log('Connected to Redis');
 });
-const CACHE_EXPIRATION_SECONDS = 43200; // 12 hours
+const CACHE_EXPIRATION_SECONDS = 10800; // 3 hours
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -226,7 +226,7 @@ app.get('/api/analytics/Studentsvsboxes', async (req, res) => {
       }
       return acc;
     }, {});
-
+console.log("by date : ",attendanceCountByDate );
     const cleanedQuotationData = quotationData
       .filter(quotation => {
         const date = quotation.Date;
@@ -396,10 +396,10 @@ app.get('/api/analytics/mealCost', async (req, res) => {
   try {
     // Check Redis cache first
     const cachedData = await client.get(cacheKey);
-    // if (cachedData) {
-    //   console.log('Serving data from cache');
-    //   return res.json(JSON.parse(cachedData));
-    // }
+    if (cachedData) {
+      console.log('Serving data from cache');
+      return res.json(JSON.parse(cachedData));
+    }
 
     // Load the quotation sheet
     const quotationDoc = new GoogleSpreadsheet(quotationSheet, serviceAccountAuth);
@@ -788,10 +788,10 @@ console.log("Returning results:", finalResults);
     try {
       // Check if result is cached
       const cachedResult = await client.get(cacheKey);
-      if (cachedResult) {
-        console.log('Serving data from cache');
-        return res.json(JSON.parse(cachedResult));
-      }
+        if (cachedResult) {
+          console.log('Serving data from cache');
+          return res.json(JSON.parse(cachedResult));
+        }
   
       const attendanceDoc = new GoogleSpreadsheet(attendanceSheet, serviceAccountAuth);
       await attendanceDoc.loadInfo();
