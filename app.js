@@ -899,10 +899,10 @@ console.log("Returning results:", finalResults);
     try {
       // Check Redis cache first
       const cachedData = await client.get(cacheKey);
-      // if (cachedData) {
-      //   console.log('Serving data from cache');
-      //   return res.json(JSON.parse(cachedData));
-      // }
+      if (cachedData) {
+        console.log('Serving data from cache');
+        return res.json(JSON.parse(cachedData));
+      }
   
       // Load the quotation sheet
       const quotationDoc = new GoogleSpreadsheet(quotationSheet, serviceAccountAuth);
