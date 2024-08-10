@@ -44,7 +44,16 @@ const serviceAccountAuth = new JWT({
 const drive = google.drive({ version: 'v3', auth: serviceAccountAuth });
 
  
-
+function isSheetNameValid(sheetTitle) {
+  // Clean up the sheet title by removing extra spaces and ensuring only one space between month and year
+  const cleanedTitle = sheetTitle.trim().replace(/\s+/g, ' ');
+  
+  // Define a regular expression to match the format "monthname year" with exactly one space
+  const sheetNamePattern = /^[A-Za-z]+\s\d{4}$/;
+  
+  // Check if the cleaned sheet name matches the pattern
+  return sheetNamePattern.test(cleanedTitle);
+}
 // Route to serve dummy HTML at the root
 app.get('/', (req, res) => {
   res.send(`
@@ -416,7 +425,7 @@ app.get('/api/analytics/mealCost', async (req, res) => {
         const headers = sheet.headerValues.map(header => header.trim());
 
         // Check if the sheet contains the "Cost for 200 Meals" column
-        if (headers.includes('Cost for 200 Meals')) {
+        if (headers.includes('Cost for 200 Meals')&&isSheetNameValid(sheet.title)){
           const rows = await sheet.getRows();
 
           // Extract data and perform calculations
@@ -533,7 +542,7 @@ app.get('/api/analytics/AverageStudentVsBoxes', async (req, res) => {
       for (const sheet of doc.sheetsByIndex) {
         try {
           await sheet.loadHeaderRow();
-          if (sheet.headerValues.includes('No. Of Boxes')) {
+          if (sheet.headerValues.includes('No. Of Boxes')&&isSheetNameValid(sheet.title)) {
             validSheets.push(cleanTitle(sheet.title));
           }
         } catch (err) {
@@ -878,9 +887,7 @@ console.log("Returning results:", finalResults);
   
  
 
- 
-
-  app.get('/api/analytics/totalMealsServed', async (req, res) => {
+ app.get('/api/analytics/totalMealsServed', async (req, res) => {
     const { quotationSheet } = req.query;
   
     if (!quotationSheet) {
@@ -913,7 +920,8 @@ console.log("Returning results:", finalResults);
           const headers = sheet.headerValues.map(header => header.trim());
   
           // Check if the sheet contains the "No. Of Boxes" column
-          if (headers.includes('No. Of Boxes')) {
+          
+          if (isSheetNameValid(sheet.title)&&headers.includes('No. Of Boxes')) {
             const rows = await sheet.getRows();
   
             // Extract data and perform calculations
@@ -939,16 +947,16 @@ console.log("Returning results:", finalResults);
               return hasValidDate && hasValidBoxes && !isLastRow;
             });
   
-            console.log(`Valid data for sheet ${sheet.title}:`, validData);
+            // console.log(`Valid data for sheet ${sheet.title}:`, validData);
   
             // Find the latest date
             validData.forEach(row => {
               const date = row.Date;
               const parsedDate = parse(date, 'MM/dd/yyyy', new Date());
-              console.log(`Parsed date for row ${JSON.stringify(row)}:`, parsedDate);
+              // console.log(`Parsed date for row ${JSON.stringify(row)}:`, parsedDate);
               if (isValid(parsedDate) && (!latestDate || parsedDate > latestDate)) {
                 latestDate = parsedDate;
-                console.log(`Updated latest date:`, latestDate);
+                // console.log(`Updated latest date:`, latestDate);
               }
             });
   
@@ -960,6 +968,8 @@ console.log("Returning results:", finalResults);
   
             // Store the result with the sheet name
             sheetResults[sheet.title] = totalCostMeals;
+          }else{
+            console.log('The sheet is not valid:', sheet.title);
           }
         } catch (error) {
           console.warn(`Error processing sheet ${sheet.title}:`, error.message);
@@ -1197,6 +1207,88 @@ console.log("Returning results:", finalResults);
       res.status(500).json({ error: 'Internal Server Error' });
     }
   });
+
+
+  app.get('/api/analytics/quotationperMeal', async (req, res) => {
+    const { quotationSheet, quotationWorkSheet } = req.query;
+
+    if (!quotationSheet || !quotationWorkSheet) {
+        return res.status(400).json({ error: 'All sheet and worksheet IDs are required' });
+    }
+
+    const cacheKey = `quotationperMeal:${quotationSheet}:${quotationWorkSheet}`;
+
+    try {
+        // Check if result is cached
+        const cachedResult = await client.get(cacheKey);
+        if (cachedResult) {
+            console.log("Serving data from cache");
+            return res.json(JSON.parse(cachedResult));
+        }
+
+        // Load the quotation sheet
+        const quotationDoc = new GoogleSpreadsheet(quotationSheet, serviceAccountAuth);
+        await quotationDoc.loadInfo();
+
+        // Clean the worksheet title
+        const cleanTitle = (title) => {
+            return title.trim().replace(/\s+/g, ' ').toLowerCase();
+        };
+
+        // Get all worksheet titles
+        const worksheetTitles = quotationDoc.sheetsByIndex.map(sheet => sheet.title);
+        
+        // Find the matching worksheet by comparing cleaned titles (case insensitive)
+        const targetWorksheet = worksheetTitles.find(title => cleanTitle(title) === cleanTitle(quotationWorkSheet));
+
+        if (!targetWorksheet) {
+            return res.status(404).json({ error: 'Worksheet not found' });
+        }
+
+        // Load the specific worksheet by title
+        const worksheet = quotationDoc.sheetsByTitle[targetWorksheet];
+        await worksheet.loadCells('D4:F'); // Load cells from D4 to the last F column
+
+        const data = [];
+        let rowIndex = 5; // Start from row 4
+
+        // Iterate through rows starting from D4
+        while (true) {
+            const mealPlanCell = worksheet.getCell(rowIndex, 3); // Column D (index 3)
+            const quotationsCell = worksheet.getCell(rowIndex, 4); // Column E (index 4)
+            const costCell = worksheet.getCell(rowIndex, 5); // Column F (index 5)
+
+            // Break the loop if there's no more data in the Meal Plan column
+            if (!mealPlanCell.value) break;
+
+            // Ensure cell values are strings and trim them
+            const mealPlan = (mealPlanCell.value || '').toString().trim();
+            const quotations = (quotationsCell.value || '').toString().trim();
+            const costFor200Meals = (costCell.value || '').toString().trim();
+
+            data.push({
+                mealPlan,
+                quotations,
+                costFor200Meals
+            });
+
+            rowIndex++;
+        }
+
+        // Cache the result
+        await client.setEx(cacheKey, CACHE_EXPIRATION_SECONDS, JSON.stringify(data));
+
+        // Return the result
+        res.json(data);
+
+    } catch (error) {
+        console.error('Error accessing Google Sheets:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+
+
   
   
 export default app;
