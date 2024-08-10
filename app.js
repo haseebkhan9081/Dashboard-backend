@@ -899,10 +899,10 @@ console.log("Returning results:", finalResults);
     try {
       // Check Redis cache first
       const cachedData = await client.get(cacheKey);
-      if (cachedData) {
-        console.log('Serving data from cache');
-        return res.json(JSON.parse(cachedData));
-      }
+      // if (cachedData) {
+      //   console.log('Serving data from cache');
+      //   return res.json(JSON.parse(cachedData));
+      // }
   
       // Load the quotation sheet
       const quotationDoc = new GoogleSpreadsheet(quotationSheet, serviceAccountAuth);
@@ -981,7 +981,7 @@ console.log("Returning results:", finalResults);
       const totalMealsServed = Object.values(sheetResults).reduce((sum, value) => sum + value, 0);
   
       // Cache the result
-      const formattedLatestDate = latestDate ? format(latestDate, 'dd/MMMM/yyyy', { locale: enUS }) : null;
+      const formattedLatestDate = latestDate ? format(latestDate, 'MMMM/dd/yyyy', { locale: enUS }) : null;
       
       await client.setEx(cacheKey, CACHE_EXPIRATION_SECONDS, JSON.stringify({ totalMealsServed, formattedLatestDate }));
       // Return the result
