@@ -492,7 +492,7 @@ app.get('/api/analytics/AverageStudentVsBoxes', async (req, res) => {
     return res.status(400).json({ error: 'Sheet IDs for both quotation and attendance are required' });
   }
 
-  const cacheKey = `mealCostStudentAverage:${quotationSheet}:${attendanceSheet}`;
+  const cacheKey = `AverageStudentVsBoxes:${quotationSheet}:${attendanceSheet}`;
 
   try {
     // Check if result is cached
