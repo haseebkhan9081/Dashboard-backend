@@ -27,10 +27,21 @@ client.connect().then(() => {
 const CACHE_EXPIRATION_SECONDS = 10800; // 3 hours
 const app = express();
 const port = process.env.PORT || 3000;
+const allowedOrigins = [
+  process.env.SERVER_URL, // First origin from environment variable
+  process.env.NOURISHED_SERVER  // Second origin from environment variable
+]
 
-app.use(cors({
-  origin: process.env.SERVER_URL, // Allow requests from this origin
-}));
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (allowedOrigins.includes(origin) || !origin) {
+      callback(null, true); // Allow the request
+    } else {
+      callback(new Error('Not allowed by CORS')); // Reject the request
+    }
+  }
+};
+app.use(cors(corsOptions));
 app.use(bodyParser.json());
 
 // Initialize auth for Google Sheets
@@ -120,10 +131,7 @@ app.get('/api/sheet/worksheets', async (req, res) => {
 });
 
 // Utility function to validate dates
-const isValidDate = (dateStr) => {
-  const date = new Date(dateStr);
-  return !isNaN(date);
-};
+ 
 
 // Endpoint to fetch data from a specific worksheet
 app.get('/api/sheet/worksheet/data', async (req, res) => {
