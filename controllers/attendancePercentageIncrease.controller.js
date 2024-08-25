@@ -31,17 +31,22 @@ import averageAttendancePerMonth from '../helpers/averageAttendancePerMonth.js';
     const attendanceDoc=new GoogleSpreadsheet(attendanceSheet,serviceAccountAuth);
     await attendanceDoc.loadInfo();
     console.log("Sheet loaded successfully ",attendanceDoc?.title);
+    //filter the valid worksheets 
     const validSheets=await filterValidSheets(attendanceDoc);
     console.log("valid sheets ",validSheets);
+    //now sort the worksheets
     const sortedSheetTitles=sortSheetTitles(validSheets);
     console.log(sortedSheetTitles);
+    //now let's get the most recent one
     const latestMonth=sortedSheetTitles.slice(0,1)[0];
+    //add our starting sheet
     const titles=['June 2024']
     titles.push(latestMonth)
+    //get the average of both the strating and recent sheet
     const averageAttendancePerM=await averageAttendancePerMonth(attendanceDoc,titles);
-    
-    console.log("data for the latest month ",averageAttendancePerM[latestMonth])
+//calculate the percentage increase
     const AttendancePercentageIncreaseResult=(((averageAttendancePerM[latestMonth]?.averageStudentsPresent-averageAttendancePerM[titles[0]]?.averageStudentsPresent)/averageAttendancePerM[titles[0]]?.averageStudentsPresent)*100).toFixed(2);
+   //store the data in cache
     await client.setEx(cacheKey,CACHE_EXPIRATION_SECONDS,JSON.stringify(Number(AttendancePercentageIncreaseResult)));
     return res.json(Number(AttendancePercentageIncreaseResult));
         }catch(error){
