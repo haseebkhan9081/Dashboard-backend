@@ -6,25 +6,10 @@ import { google } from 'googleapis';
 import { parse, isValid,format } from "date-fns";
 import {enUS} from "date-fns/locale";
 dotenv.config();
-const client = createClient({
-  url: `redis://${process.env.REDIS_HOST}:${process.env.REDIS_PORT}`,
-  password: process.env.REDIS_PASSWORD
-});
-
-client.on('error', (err) => {
-  console.error('Redis error:', err);
-});
-
-client.connect().then(() => {
-  console.log('Connected to Redis');
-});
+import client from '../helpers/redisClient.js';
 
 const CACHE_EXPIRATION_SECONDS = 10800; // 3 hours
-const serviceAccountAuth = new JWT({
-  email: process.env.GOOGLE_CLIENT_EMAIL,
-  key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'), // Ensure new lines are preserved
-  scopes: ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive.readonly'],
-});
+import serviceAccountAuth from '../helpers/authService.js';
 
  export async function Studentsvsboxes (req, res)  {
     const { attendanceSheet, quotationSheet, attendanceWorkSheet, quotationWorkSheet } = req.query;

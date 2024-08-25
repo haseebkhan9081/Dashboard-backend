@@ -6,25 +6,10 @@ import { JWT } from 'google-auth-library';
 import { createClient } from 'redis';
  
 dotenv.config();
-const client = createClient({
-  url: `redis://${process.env.REDIS_HOST}:${process.env.REDIS_PORT}`,
-  password: process.env.REDIS_PASSWORD
-});
-
-client.on('error', (err) => {
-  console.error('Redis error:', err);
-});
-
-client.connect().then(() => {
-  console.log('Connected to Redis');
-});
-
+import client from '../helpers/redisClient.js';
+import serviceAccountAuth from '../helpers/authService.js';
 const CACHE_EXPIRATION_SECONDS = 10800; // 3 hours
-const serviceAccountAuth = new JWT({
-  email: process.env.GOOGLE_CLIENT_EMAIL,
-  key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'), // Ensure new lines are preserved
-  scopes: ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive.readonly'],
-});
+ 
 
  
 export async function Expenses (req, res){
