@@ -31,7 +31,7 @@ const averageAttendancePerMonth = async (doc, titles) => {
           const date = row.Date;
           if (row.Time && row.Time.length > 0) {
             if (!acc[date]) {
-              acc[date] = 1;
+              acc[date] = 0;
             }
             acc[date]++;
           }

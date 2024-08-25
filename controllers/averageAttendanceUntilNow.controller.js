@@ -54,7 +54,7 @@ const CACHE_EXPIRATION_SECONDS = 259200; // 3 days
           if (attendance.Time && attendance.Time.length > 0 && isValid(parsedDate)) {
             const formattedDate = parsedDate.toISOString().split('T')[0]; // Normalize date to YYYY-MM-DD
             if (!acc[formattedDate]) {
-              acc[formattedDate] = 0;
+              acc[formattedDate] = 1;
             }
             acc[formattedDate]++;
           }

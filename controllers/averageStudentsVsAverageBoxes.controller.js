@@ -11,8 +11,7 @@ import isSheetNameValid from '../helpers/isSheetNameValid.js';
 dotenv.config();
 import client from '../helpers/redisClient.js';
 import serviceAccountAuth from '../helpers/authService.js';
-const CACHE_EXPIRATION_SECONDS = 10800; // 3 hours
- ;
+const CACHE_EXPIRATION_SECONDS = 3*24*60*60; // 3 days
 
  
 
@@ -192,7 +191,7 @@ export  async function AverageStudentVsBoxes (req, res){
               const date = row.Date;
               if (row.Time && row.Time.length > 0) {
                 if (!acc[date]) {
-                  acc[date] = 1;
+                  acc[date] = 0;
                 }
                 acc[date]++;
               }
