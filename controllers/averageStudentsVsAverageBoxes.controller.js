@@ -13,8 +13,6 @@ import client from '../helpers/redisClient.js';
 import serviceAccountAuth from '../helpers/authService.js';
 const CACHE_EXPIRATION_SECONDS = 3*24*60*60; // 3 days
 
- 
-
 export  async function AverageStudentVsBoxes (req, res){
     const { quotationSheet, attendanceSheet } = req.query;
   

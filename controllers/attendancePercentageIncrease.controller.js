@@ -40,7 +40,7 @@ import averageAttendancePerMonth from '../helpers/averageAttendancePerMonth.js';
     //now let's get the most recent one
     const latestMonth=sortedSheetTitles.slice(0,1)[0];
     //add our starting sheet
-    const titles=['June 2024']
+    const titles=['July 2024']
     titles.push(latestMonth)
     //get the average of both the strating and recent sheet
     const averageAttendancePerM=await averageAttendancePerMonth(attendanceDoc,titles);
