@@ -15,6 +15,8 @@ import client from '../helpers/redisClient.js';
 const CACHE_EXPIRATION_SECONDS = 10800; // 3 hours
 
 import serviceAccountAuth from '../helpers/authService.js';
+import filterValidSheets from '../helpers/filterValidSheets.js';
+import sortSheetTitles from '../helpers/sortSheetTitles.js';
 
  
  
@@ -38,17 +40,21 @@ import serviceAccountAuth from '../helpers/authService.js';
       // Load the quotation sheet
       const quotationDoc = new GoogleSpreadsheet(quotationSheet, serviceAccountAuth);
       await quotationDoc.loadInfo();
-  
+      const validSheets=await filterValidSheets(quotationDoc);
+      const sortedSheetTitles=sortSheetTitles(validSheets);
+      const latestThreeMonths=sortedSheetTitles.slice(0,3);
+      console.log("valid sheets for qutaion doc: ",latestThreeMonths);
       const sheetResults = {};
   
       // Iterate over all sheets
-      for (const sheetId in quotationDoc.sheetsById) {
-        const sheet = quotationDoc.sheetsById[sheetId];
-  
+      for (const sheetTitle of latestThreeMonths) {
+         
+        const sheet = quotationDoc.sheetsByTitle[sheetTitle];
+ 
         try {
           await sheet.loadHeaderRow();
           const headers = sheet.headerValues.map(header => header.trim());
-  
+  console.log("headers here ",headers);
           // Check if the sheet contains the "Cost for 200 Meals" column
           if (headers.includes('Cost for 200 Meals')&&isSheetNameValid(sheet.title)){
             const rows = await sheet.getRows();
