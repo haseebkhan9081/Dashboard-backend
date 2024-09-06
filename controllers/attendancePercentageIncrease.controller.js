@@ -8,7 +8,7 @@
     import sortSheetTitles from '../helpers/sortSheetTitles.js';
 import averageAttendancePerMonth from '../helpers/averageAttendancePerMonth.js';
     dotenv.config();
-    const CACHE_EXPIRATION_SECONDS = 259200; // 3 days
+    const CACHE_EXPIRATION_SECONDS = 6*24*60*60; // 6 days
     import serviceAccountAuth from '../helpers/authService.js';
     export async function AttendancePercentageIncrease (req,res){
         const {attendanceSheet } = req.query;

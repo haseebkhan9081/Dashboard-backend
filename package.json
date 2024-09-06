@@ -20,6 +20,7 @@
     "google-spreadsheet": "^4.1.2",
     "googleapis": "^140.0.1",
     "ioredis": "^5.4.1",
+    "nodemon": "^3.1.4",
     "redis": "^4.7.0",
     "serverless-http": "^3.2.0"
   }

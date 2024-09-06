@@ -11,7 +11,8 @@ import isSheetNameValid from '../helpers/isSheetNameValid.js';
 dotenv.config();
 import client from '../helpers/redisClient.js';
 import serviceAccountAuth from '../helpers/authService.js';
-const CACHE_EXPIRATION_SECONDS = 3*24*60*60; // 3 days
+const CACHE_EXPIRATION_SECONDS = 6*24*60*60; // 6 days
+import sortSheetTitles from "../helpers/sortSheetTitles.js"
 
 export  async function AverageStudentVsBoxes (req, res){
     const { quotationSheet, attendanceSheet } = req.query;
@@ -251,7 +252,11 @@ export  async function AverageStudentVsBoxes (req, res){
       };
   
       const attendanceTitles = attendanceDoc.sheetsByIndex.map(sheet => cleanTitle(sheet.title));
-      const attendanceResults = await processAttendanceSheets(attendanceDoc, attendanceTitles);
+      
+      const sortedTitles=sortSheetTitles(attendanceTitles);
+       
+
+      const attendanceResults = await processAttendanceSheets(attendanceDoc, sortedTitles.slice(0,3));
       console.log("qu result", quotationResults);
   console.log("att result", attendanceResults);
   

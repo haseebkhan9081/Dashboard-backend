@@ -10,7 +10,7 @@ import {enUS} from "date-fns/locale";
 dotenv.config();
 import client from '../helpers/redisClient.js';
 
-const CACHE_EXPIRATION_SECONDS = 10800; // 3 hours
+const CACHE_EXPIRATION_SECONDS = 1*24*60*60; // 1 day
 import serviceAccountAuth from '../helpers/authService.js';
 
 export async function MealsServedLast7days (req, res)  {

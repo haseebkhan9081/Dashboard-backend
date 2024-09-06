@@ -11,7 +11,7 @@ import {enUS} from "date-fns/locale";
 dotenv.config();
 import client from '../helpers/redisClient.js';
 
-const CACHE_EXPIRATION_SECONDS = 259200; // 3 days
+const CACHE_EXPIRATION_SECONDS = 30*24*60*60; // 30 days
 import serviceAccountAuth from '../helpers/authService.js';
 
 

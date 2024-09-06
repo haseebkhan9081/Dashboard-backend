@@ -6,11 +6,10 @@ import { JWT } from 'google-auth-library';
 import { createClient } from 'redis';
 import { google } from 'googleapis';
 import { parse, isValid,format } from "date-fns";
-import {enUS} from "date-fns/locale";
 dotenv.config();
 import serviceAccountAuth from '../helpers/authService.js';
 import client from '../helpers/redisClient.js';
-const CACHE_EXPIRATION_SECONDS = 259200; // 3 days
+const CACHE_EXPIRATION_SECONDS = 7*24*60*60; // 7 days
 
  
  export async function AverageAttendanceUntilNow (req, res){
