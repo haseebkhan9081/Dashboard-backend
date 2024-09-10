@@ -20,6 +20,7 @@ import mealCostRoute from "./routes/mealCost.route.js"
 import expensesRoute from "./routes/expenses.route.js"
 import StudentsvsboxesRoute from "./routes/Studentsvsboxes.route.js"
 import attendancePercentageIncreaseRoute from "./routes/attendancePercentageIncrease.route.js";
+import attendanceSummaryByDateRoute from "./routes/attendanceSummarybyDate.route.js"
 
 import client from './helpers/redisClient.js';
 const CACHE_EXPIRATION_SECONDS = 10800; // 3 hours
@@ -164,6 +165,6 @@ app.use("/api/analytics",quotationperMealRoute);
 app.use("/api/analytics",averageStudentVsBoxesRoutes);
 app.use("/api/analytics",averageAttendanceUntilNowRoute);
 app.use("/api/analytics",attendancePercentageIncreaseRoute);
-
+app.use("/api/analytics",attendanceSummaryByDateRoute);
   
 export default app;
