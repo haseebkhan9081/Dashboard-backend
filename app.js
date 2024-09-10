@@ -154,7 +154,7 @@ app.get('/api/sheet/worksheet/data', async (req, res) => {
   }
 });
 
-app.use("/api/analytics",StudentsvsboxesRoute); 
+app.use("/api/analytics",StudentsvsboxesRoute);
 app.use("/api/analytics",expensesRoute);
 app.use("/api/analytics",mealCostRoute);  
 app.use("/api/analytics",studentAveragePerClassRoute);   
