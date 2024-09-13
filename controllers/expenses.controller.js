@@ -39,7 +39,7 @@ export async function Expenses (req, res){
       await quotationDoc.loadInfo();
   
       // Load the expenses sheet
-      const expensesSheetDoc = quotationDoc.sheetsById[expensesWorkSheet];
+      const expensesSheetDoc = quotationDoc.sheetsByTitle[expensesWorkSheet];
       if (!expensesSheetDoc) {
         return res.status(404).json({ error: 'Expenses worksheet not found' });
       }
@@ -84,7 +84,66 @@ export async function Expenses (req, res){
   
         const parsedSalary = parseFloat(salary.replace(/,/g, '').trim());
   
-        if (name.includes('cleaning') || name.includes('wifi') || name.includes('ice')) {
+        if (name.includes('cleaning') ||
+        name.includes('wifi') ||
+        name.includes('ice') ||
+        name.includes('rent') ||
+        name.includes('electricity') ||
+        name.includes('water') ||
+        name.includes('gas') ||
+        name.includes('energy') ||
+        name.includes('internet') ||
+        name.includes('broadband') ||
+        name.includes('phone') ||
+        name.includes('mobile') ||
+        name.includes('landline') ||
+        name.includes('stationery') ||
+        name.includes('paper') ||
+        name.includes('pens') ||
+        name.includes('insurance') ||
+        name.includes('policy') ||
+        name.includes('fuel') ||
+        name.includes('transport') ||
+        name.includes('uber') ||
+        name.includes('taxi') ||
+        name.includes('bus') ||
+        name.includes('meal') ||
+        name.includes('lunch') ||
+        name.includes('food') ||
+        name.includes('dinner') ||
+        name.includes('flight') ||
+        name.includes('hotel') ||
+        name.includes('accommodation') ||
+        name.includes('airbnb') ||
+        name.includes('advertising') ||
+        name.includes('promo') ||
+        name.includes('marketing') ||
+        name.includes('ad') ||
+        name.includes('subscription') ||
+        name.includes('software') ||
+        name.includes('service') ||
+        name.includes('membership') ||
+        name.includes('legal') ||
+        name.includes('lawyer') ||
+        name.includes('court') ||
+        name.includes('consultant') ||
+        name.includes('advice') ||
+        name.includes('consulting') ||
+        name.includes('maintenance') ||
+        name.includes('repair') ||
+        name.includes('IT') ||
+        name.includes('hardware') ||
+        name.includes('training') ||
+        name.includes('course') ||
+        name.includes('workshop') ||
+        name.includes('license') ||
+        name.includes('permit') ||
+        name.includes('tax') ||
+        name.includes('VAT') ||
+        name.includes('GST') ||
+        name.includes('misc') ||
+        name.includes('miscellaneous')
+        ) {
           otherExpensesSum += parsedSalary;
         } else {
           salarySum += parsedSalary;

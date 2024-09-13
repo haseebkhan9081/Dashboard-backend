@@ -13,6 +13,7 @@ import client from '../helpers/redisClient.js';
 import serviceAccountAuth from '../helpers/authService.js';
 const CACHE_EXPIRATION_SECONDS = 6*24*60*60; // 6 days
 import sortSheetTitles from "../helpers/sortSheetTitles.js"
+import SumStudentsFromAllDepartments from '../helpers/SumStudentsFromAllDepartments.js';
 
 export  async function AverageStudentVsBoxes (req, res){
     const { quotationSheet, attendanceSheet } = req.query;
@@ -176,14 +177,9 @@ export  async function AverageStudentVsBoxes (req, res){
   
           const rows = await sheetDoc.getRows();
           const extracteData=   await  extractData(sheetDoc,rows);
-          const data = extracteData.map(row => ({
-            Date: row.Date,
-            Time: row.Time,
-            Name:row.Name,
-            Department:row.Department
-          }));
+           
   
-          console.log(`Data for attendance sheet ${sheetTitle}:`, data.slice(0,3));
+          console.log(`Data for attendance sheet ${sheetTitle}:`, extracteData.slice(0,3));
   
           const countStudentsPresent = (data) => {
             return data.reduce((acc, row) => {
@@ -197,8 +193,18 @@ export  async function AverageStudentVsBoxes (req, res){
               return acc;
             }, {});
           };
-  
-          const attendanceCountByDate = countStudentsPresent(data);
+
+          let attendanceCountByDate;
+          if(extracteData.some(item => item.hasOwnProperty('Total') && item.hasOwnProperty('Present'))){
+            console.log("yes this is the changed data");
+            
+            
+            attendanceCountByDate=SumStudentsFromAllDepartments(extracteData);
+                    }else{
+
+                   
+            attendanceCountByDate = countStudentsPresent(extracteData);
+        }
           console.log("students present by date ",attendanceCountByDate);
   
           const calculateAverageAttendance = (attendanceCountByDate) => {

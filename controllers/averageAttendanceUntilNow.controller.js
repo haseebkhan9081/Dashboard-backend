@@ -9,10 +9,11 @@ import { parse, isValid,format } from "date-fns";
 dotenv.config();
 import serviceAccountAuth from '../helpers/authService.js';
 import client from '../helpers/redisClient.js';
+import SumStudentsFromAllDepartments from '../helpers/SumStudentsFromAllDepartments.js';
 const CACHE_EXPIRATION_SECONDS = 7*24*60*60; // 7 days
 
  
- export async function AverageAttendanceUntilNow (req, res){
+export async function AverageAttendanceUntilNow (req, res){
     const { attendanceSheet } = req.query;
   
     if (!attendanceSheet) {
@@ -52,15 +53,15 @@ const CACHE_EXPIRATION_SECONDS = 7*24*60*60; // 7 days
           const parsedDate = parse(date, 'MM/dd/yyyy', new Date());
           if (attendance.Time && attendance.Time.length > 0 && isValid(parsedDate)) {
             const formattedDate = parsedDate.toISOString().split('T')[0]; // Normalize date to YYYY-MM-DD
-            if (!acc[formattedDate]) {
-              acc[formattedDate] = 1;
+            if (!acc[date]) {
+              acc[date] = 0;
             }
-            acc[formattedDate]++;
+            acc[date]++;
           }
           return acc;
         }, {});
       };
-  
+      
       const calculateAverageAttendance = (attendanceCountByDate) => {
         const { totalPresentStudents, daysWithAttendance } = Object.entries(attendanceCountByDate).reduce((acc, [date, count]) => {
           if (count > 0) {
@@ -79,8 +80,17 @@ const CACHE_EXPIRATION_SECONDS = 7*24*60*60; // 7 days
       for (const sheet of allAttendanceSheets) {
         const attendanceRows = await sheet.getRows();
         const attendanceData = extractData(sheet, attendanceRows);
-        const attendanceCountByDate = countStudentsPresent(attendanceData);
-  console.log("count present students ",attendanceCountByDate);
+        console.log("attendance data ",attendanceData);
+        let attendanceCountByDate;
+        if(attendanceData.some(item => item.hasOwnProperty('Total') && item.hasOwnProperty('Present'))){
+console.log("yes this is the changed data");
+
+
+attendanceCountByDate=SumStudentsFromAllDepartments(attendanceData);
+        }else{
+          attendanceCountByDate = countStudentsPresent(attendanceData);
+        }
+ console.log("count present students ",attendanceCountByDate);
         const averageAttendanceForSheet = calculateAverageAttendance(attendanceCountByDate);
         totalPresentStudents += Object.values(attendanceCountByDate).reduce((sum, count) => sum + count, 0);
         totalDaysWithAttendance += Object.keys(attendanceCountByDate).length;
@@ -96,7 +106,7 @@ const CACHE_EXPIRATION_SECONDS = 7*24*60*60; // 7 days
   
       // Cache the result
       await client.setEx(cacheKey, CACHE_EXPIRATION_SECONDS, JSON.stringify(result));
-  
+    
       // Return the result
       res.json(result);
     } catch (error) {

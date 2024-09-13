@@ -10,6 +10,7 @@ import client from '../helpers/redisClient.js';
 
 const CACHE_EXPIRATION_SECONDS = 1*24*60*60; // 1 day
 import serviceAccountAuth from '../helpers/authService.js';
+import SumStudentsFromAllDepartments from '../helpers/SumStudentsFromAllDepartments.js';
 
  export async function Studentsvsboxes (req, res)  {
     const { attendanceSheet, quotationSheet, attendanceWorkSheet, quotationWorkSheet } = req.query;
@@ -65,8 +66,13 @@ import serviceAccountAuth from '../helpers/authService.js';
   
       const attendanceData = extractData(attendanceSheetDoc, attendanceRows);
       const quotationData = extractData(quotationSheetDoc, quotationRows);
-  
-      const attendanceCountByDate = attendanceData.reduce((acc, attendance) => {
+  let attendanceCountByDate;
+      if(attendanceData.some(item => item.hasOwnProperty('Total') && item.hasOwnProperty('Present'))){
+attendanceCountByDate=SumStudentsFromAllDepartments(attendanceData);
+
+      }
+else{
+        attendanceCountByDate = attendanceData.reduce((acc, attendance) => {
         const date = attendance.Date;
         const parsedDate = parse(date, 'MM/dd/yyyy', new Date());
         if (isValid(parsedDate) && attendance.Time && attendance.Time.length > 0) {
@@ -77,6 +83,8 @@ import serviceAccountAuth from '../helpers/authService.js';
         }
         return acc;
       }, {});
+
+    }
   console.log("by date : ",attendanceCountByDate );
       const cleanedQuotationData = quotationData
         .filter(quotation => {

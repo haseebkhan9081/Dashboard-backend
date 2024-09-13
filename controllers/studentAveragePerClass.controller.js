@@ -64,21 +64,41 @@ import serviceAccountAuth from '../helpers/authService.js';
           return rowData;
         });
       };
-  
+  let groupedData;
       const currentAttendanceData = extractData(attendanceSheetDocCurrent, attendanceRowsCurrent);
   
-      const groupedData = currentAttendanceData.reduce((acc, row) => {
-        if (row.Time && row.Time.length > 0) {
-          if (!acc[row.Department]) {
-            acc[row.Department] = {};
-          }
-          if (!acc[row.Department][row.Date]) {
-            acc[row.Department][row.Date] = 0;
-          }
-          acc[row.Department][row.Date] += 1;
-        }
-        return acc;
-      }, {});
+      if(currentAttendanceData.some(item => item.hasOwnProperty('Total') && item.hasOwnProperty('Present'))){
+        console.log("yes this is the changed data");
+        
+        groupedData = currentAttendanceData.reduce((acc, row) => {
+         
+            if (!acc[row.Department]) {
+              acc[row.Department] = {};
+            }
+            if (!acc[row.Department][row.Date]) {
+              acc[row.Department][row.Date] = 0;
+            }
+            acc[row.Department][row.Date] += Number(row.Present);
+        
+          return acc;
+        }, {});        }else{
+
+                  groupedData = currentAttendanceData.reduce((acc, row) => {
+                    if (row.Time && row.Time.length > 0) {
+                      if (!acc[row.Department]) {
+                        acc[row.Department] = {};
+                      }
+                      if (!acc[row.Department][row.Date]) {
+                        acc[row.Department][row.Date] = 0;
+                      }
+                      acc[row.Department][row.Date] += 1;
+                    }
+                    return acc;
+                  }, {});
+                  
+                }
+
+        
   
       const calculateAverage = (data) => {
         const result = {};
