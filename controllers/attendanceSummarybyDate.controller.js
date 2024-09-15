@@ -69,7 +69,11 @@ const attendanceDataByDate=extractedData.filter(row=>row.Date===date);
   
   console.log("groupedData finally ",groupedData);
   
-return res.json(groupedData);
+return res.json({
+  AbsentsData:groupedData,
+  Present:attendanceDataByDate.length-filteredData.length,
+  Absent:filteredData.length
+});
 
 
         }catch(err){
