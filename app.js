@@ -40,7 +40,7 @@ const corsOptions = {
     }
   }
 };
-app.use(cors(corsOptions));
+app.use(cors()); // Allows all origins
 app.use(bodyParser.json());
 
 // Initialize auth for Google Sheets
