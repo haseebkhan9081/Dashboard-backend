@@ -7,7 +7,7 @@ import { JWT } from 'google-auth-library';
 import { createClient } from 'redis';
 import { google } from 'googleapis';
 import { parse, isValid,format } from "date-fns";
-import {enUS} from "date-fns/locale";
+import {enUS, zhCN} from "date-fns/locale";
 dotenv.config();
 import client from '../helpers/redisClient.js';
 
@@ -72,12 +72,17 @@ import serviceAccountAuth from '../helpers/authService.js';
         
         groupedData = currentAttendanceData.reduce((acc, row) => {
          
+            
             if (!acc[row.Department]) {
               acc[row.Department] = {};
             }
             if (!acc[row.Department][row.Date]) {
               acc[row.Department][row.Date] = 0;
             }
+             if(isNaN(row.Present)){
+              console.log("this is not a number ",row.Present);
+              return acc;
+             }
             acc[row.Department][row.Date] += Number(row.Present);
         
           return acc;
@@ -91,15 +96,34 @@ import serviceAccountAuth from '../helpers/authService.js';
                       if (!acc[row.Department][row.Date]) {
                         acc[row.Department][row.Date] = 0;
                       }
+                      if(isNaN(row.Present)){
+                        console.log("this is not a number ",row.Present);
+                        return acc;
+                       }
                       acc[row.Department][row.Date] += 1;
                     }
                     return acc;
                   }, {});
                   
                 }
-
-        
-  
+                const filterGroupedData = (data) => {
+                  for (const department in data) {
+                    // Get the department's data object
+                    const departmentData = data[department];
+                
+                    // Filter out entries where the value is 0
+                    const filteredData = Object.fromEntries(
+                      Object.entries(departmentData).filter(([date, value]) => value !== 0)
+                    );
+                
+                    // Update the original data with filtered data
+                    data[department] = filteredData;
+                  }
+                
+                  return data; // Return the modified data
+                };
+         groupedData=filterGroupedData(groupedData);
+  console.log("groupedData ",groupedData);
       const calculateAverage = (data) => {
         const result = {};
         for (const department in data) {
@@ -112,7 +136,7 @@ import serviceAccountAuth from '../helpers/authService.js';
       };
   
       const averages = calculateAverage(groupedData);
-  
+ 
       // Convert to an array and sort by department name
       const response = Object.entries(averages)
         .map(([department, average]) => ({

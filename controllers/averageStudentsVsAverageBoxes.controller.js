@@ -196,7 +196,7 @@ export  async function AverageStudentVsBoxes (req, res){
 
           let attendanceCountByDate;
           if(extracteData.some(item => item.hasOwnProperty('Total') && item.hasOwnProperty('Present'))){
-            console.log("yes this is the changed data");
+            console.log("yes this is the updated data");
             
             
             attendanceCountByDate=SumStudentsFromAllDepartments(extracteData);

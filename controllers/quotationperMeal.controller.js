@@ -27,10 +27,10 @@ import serviceAccountAuth from '../helpers/authService.js';
     try {
         // Check if result is cached
         const cachedResult = await client.get(cacheKey);
-        if (cachedResult) {
-            console.log("Serving data from cache");
-            return res.json(JSON.parse(cachedResult));
-        }
+        // if (cachedResult) {
+        //     console.log("Serving data from cache");
+        //     return res.json(JSON.parse(cachedResult));
+        // }
 
         // Load the quotation sheet
         const quotationDoc = new GoogleSpreadsheet(quotationSheet, serviceAccountAuth);
@@ -48,6 +48,7 @@ import serviceAccountAuth from '../helpers/authService.js';
         const targetWorksheet = worksheetTitles.find(title => cleanTitle(title) === cleanTitle(quotationWorkSheet));
 
         if (!targetWorksheet) {
+            
             return res.status(404).json({ error: 'Worksheet not found' });
         }
 

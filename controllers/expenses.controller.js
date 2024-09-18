@@ -14,7 +14,7 @@ const CACHE_EXPIRATION_SECONDS = 7*24*60*60; // 7 days
 
 export async function Expenses (req, res){
     const { quotationSheet, expensesWorkSheet, month} = req.query;
-  
+   
     if (!quotationSheet || !expensesWorkSheet || !month) {
       return res.status(400).json({ error: 'All sheet and worksheet IDs and month are required' });
     }
@@ -29,10 +29,10 @@ export async function Expenses (req, res){
     try {
       // Check Redis cache first
       const cachedData = await client.get(cacheKey);
-      if (cachedData) {
-        console.log('Serving data from cache');
-        return res.json(JSON.parse(cachedData));
-      }
+      // if (cachedData) {
+      //   console.log('Serving data from cache');
+      //   return res.json(JSON.parse(cachedData));
+      // }
   
       // Load the quotation sheet
       const quotationDoc = new GoogleSpreadsheet(quotationSheet, serviceAccountAuth);
@@ -41,6 +41,7 @@ export async function Expenses (req, res){
       // Load the expenses sheet
       const expensesSheetDoc = quotationDoc.sheetsByTitle[expensesWorkSheet];
       if (!expensesSheetDoc) {
+        return res.json([]);
         return res.status(404).json({ error: 'Expenses worksheet not found' });
       }
       const expensesRows = await expensesSheetDoc.getRows();
