@@ -14,6 +14,7 @@ import serviceAccountAuth from '../helpers/authService.js';
 const CACHE_EXPIRATION_SECONDS = 6*24*60*60; // 6 days
 import sortSheetTitles from "../helpers/sortSheetTitles.js"
 import SumStudentsFromAllDepartments from '../helpers/SumStudentsFromAllDepartments.js';
+import countStudentsPresent from '../helpers/countStudentsPresent.js';
 
 export  async function AverageStudentVsBoxes (req, res){
     const { quotationSheet, attendanceSheet } = req.query;
@@ -181,18 +182,7 @@ export  async function AverageStudentVsBoxes (req, res){
   
           console.log(`Data for attendance sheet ${sheetTitle}:`, extracteData.slice(0,3));
   
-          const countStudentsPresent = (data) => {
-            return data.reduce((acc, row) => {
-              const date = row.Date;
-              if (row.Time && row.Time.length > 0) {
-                if (!acc[date]) {
-                  acc[date] = 0;
-                }
-                acc[date]++;
-              }
-              return acc;
-            }, {});
-          };
+           
 
           let attendanceCountByDate;
           if(extracteData.some(item => item.hasOwnProperty('Total') && item.hasOwnProperty('Present'))){

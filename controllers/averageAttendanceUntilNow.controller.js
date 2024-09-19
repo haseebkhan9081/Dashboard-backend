@@ -10,6 +10,7 @@ dotenv.config();
 import serviceAccountAuth from '../helpers/authService.js';
 import client from '../helpers/redisClient.js';
 import SumStudentsFromAllDepartments from '../helpers/SumStudentsFromAllDepartments.js';
+import countStudentsPresent from '../helpers/countStudentsPresent.js';
 const CACHE_EXPIRATION_SECONDS = 7*24*60*60; // 7 days
 
  
@@ -25,10 +26,10 @@ export async function AverageAttendanceUntilNow (req, res){
     try {
       // Check if result is cached
       const cachedResult = await client.get(cacheKey);
-      // if (cachedResult) {
-      //   console.log("Serving data from cache");
-      //   return res.json(JSON.parse(cachedResult));
-      // }
+      if (cachedResult) {
+        console.log("Serving data from cache");
+        return res.json(JSON.parse(cachedResult));
+      }
   
       // Load the attendance sheet
       const attendanceDoc = new GoogleSpreadsheet(attendanceSheet, serviceAccountAuth);
@@ -47,20 +48,7 @@ export async function AverageAttendanceUntilNow (req, res){
         });
       };
   
-      const countStudentsPresent = (data) => {
-        return data.reduce((acc, attendance) => {
-          const date = attendance.Date;
-          const parsedDate = parse(date, 'MM/dd/yyyy', new Date());
-          if (attendance.Time && attendance.Time.length > 0 && isValid(parsedDate)) {
-            const formattedDate = parsedDate.toISOString().split('T')[0]; // Normalize date to YYYY-MM-DD
-            if (!acc[date]) {
-              acc[date] = 0;
-            }
-            acc[date]++;
-          }
-          return acc;
-        }, {});
-      };
+       
       
        
   
@@ -70,10 +58,10 @@ export async function AverageAttendanceUntilNow (req, res){
       for (const sheet of allAttendanceSheets) {
         const attendanceRows = await sheet.getRows();
         const attendanceData = extractData(sheet, attendanceRows);
-        console.log("attendance data ",attendanceData);
+     
         let attendanceCountByDate;
         if(attendanceData.some(item => item.hasOwnProperty('Total') && item.hasOwnProperty('Present'))){
-console.log("yes this is the changed data");
+ 
 
 
 attendanceCountByDate=SumStudentsFromAllDepartments(attendanceData);
@@ -84,6 +72,11 @@ attendanceCountByDate=SumStudentsFromAllDepartments(attendanceData);
         
 
  const { totalPresent, daysWithAtt } = Object.entries(attendanceCountByDate).reduce((acc, [date, count]) => {
+  const parsedDate=parse(date,'MM/dd/yyyy', new Date())
+  if(!isValid(parsedDate)){
+    console.log("not valid Skipping ",date);
+    return acc;
+  }
   if (count > 0) {
     acc.totalPresent += count;
     acc.daysWithAtt += 1;
