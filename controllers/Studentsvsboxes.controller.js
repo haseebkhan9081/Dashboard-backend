@@ -27,7 +27,7 @@ import SumStudentsFromAllDepartments from '../helpers/SumStudentsFromAllDepartme
       if (cachedData) {
         console.log('Serving data from cache');
         return res.json(JSON.parse(cachedData));
-      }
+      } 
   
       const attendanceDoc = new GoogleSpreadsheet(attendanceSheet, serviceAccountAuth);
       await attendanceDoc.loadInfo();

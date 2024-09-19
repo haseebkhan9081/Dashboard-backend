@@ -25,10 +25,10 @@ export async function AverageAttendanceUntilNow (req, res){
     try {
       // Check if result is cached
       const cachedResult = await client.get(cacheKey);
-      if (cachedResult) {
-        console.log("Serving data from cache");
-        return res.json(JSON.parse(cachedResult));
-      }
+      // if (cachedResult) {
+      //   console.log("Serving data from cache");
+      //   return res.json(JSON.parse(cachedResult));
+      // }
   
       // Load the attendance sheet
       const attendanceDoc = new GoogleSpreadsheet(attendanceSheet, serviceAccountAuth);
@@ -62,17 +62,7 @@ export async function AverageAttendanceUntilNow (req, res){
         }, {});
       };
       
-      const calculateAverageAttendance = (attendanceCountByDate) => {
-        const { totalPresentStudents, daysWithAttendance } = Object.entries(attendanceCountByDate).reduce((acc, [date, count]) => {
-          if (count > 0) {
-            acc.totalPresentStudents += count;
-            acc.daysWithAttendance += 1;
-          }
-          return acc;
-        }, { totalPresentStudents: 0, daysWithAttendance: 0 });
-  
-        return daysWithAttendance > 0 ? totalPresentStudents / daysWithAttendance : 0;
-      };
+       
   
       let totalPresentStudents = 0;
       let totalDaysWithAttendance = 0;
@@ -91,9 +81,20 @@ attendanceCountByDate=SumStudentsFromAllDepartments(attendanceData);
           attendanceCountByDate = countStudentsPresent(attendanceData);
         }
  console.log("count present students ",attendanceCountByDate);
-        const averageAttendanceForSheet = calculateAverageAttendance(attendanceCountByDate);
-        totalPresentStudents += Object.values(attendanceCountByDate).reduce((sum, count) => sum + count, 0);
-        totalDaysWithAttendance += Object.keys(attendanceCountByDate).length;
+        
+
+ const { totalPresent, daysWithAtt } = Object.entries(attendanceCountByDate).reduce((acc, [date, count]) => {
+  if (count > 0) {
+    acc.totalPresent += count;
+    acc.daysWithAtt += 1;
+  }
+ 
+  return acc;
+}, { totalPresent: 0, daysWithAtt: 0 });
+        totalPresentStudents += totalPresent;
+        totalDaysWithAttendance += daysWithAtt
+ 
+
       }
   
       const averageAttendanceUntilNow = totalDaysWithAttendance > 0 ? totalPresentStudents / totalDaysWithAttendance : 0;
