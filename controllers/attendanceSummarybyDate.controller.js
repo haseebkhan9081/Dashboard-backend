@@ -6,7 +6,7 @@ import filterValidSheets from "../helpers/filterValidSheets.js";
 import extractData from "../helpers/extractData.js";
 
 
-
+const CACHE_EXPIRATION_SECONDS = 7*24*60*60; // 7 days
 export async function AttendanceSummaryByDate(req,res){
     const {attendanceSheet,date } = req.query;
 
@@ -19,10 +19,10 @@ export async function AttendanceSummaryByDate(req,res){
 
         try{
 const cachedResult=await client.get(cacheKey);
-// if(cachedResult){
-//     console.log("Serving data from cache")
-//     return res.json(JSON.parse(cachedResult));
-// }
+if(cachedResult){
+    console.log("Serving data from cache")
+    return res.json(JSON.parse(cachedResult));
+}
 
 
 const attendanceDoc=new GoogleSpreadsheet(attendanceSheet,serviceAccountAuth);
@@ -69,6 +69,12 @@ const attendanceDataByDate=extractedData.filter(row=>row.Date===date);
   
   console.log("groupedData finally ",groupedData);
   
+  await client.setEx(cacheKey,CACHE_EXPIRATION_SECONDS,JSON.stringify({
+    AbsentsData:groupedData,
+    Present:attendanceDataByDate.length-filteredData.length,
+    Absent:filteredData.length
+  }));
+
 return res.json({
   AbsentsData:groupedData,
   Present:attendanceDataByDate.length-filteredData.length,
