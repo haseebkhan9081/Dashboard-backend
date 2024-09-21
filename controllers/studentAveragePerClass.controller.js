@@ -27,10 +27,10 @@ import serviceAccountAuth from '../helpers/authService.js';
     try {
       // Check if result is cached
       const cachedResult = await client.get(cacheKey);
-        if (cachedResult) {
-          console.log('Serving data from cache');
-          return res.json(JSON.parse(cachedResult));
-        }
+        // if (cachedResult) {
+        //   console.log('Serving data from cache');
+        //   return res.json(JSON.parse(cachedResult));
+        // }
   
       const attendanceDoc = new GoogleSpreadsheet(attendanceSheet, serviceAccountAuth);
       await attendanceDoc.loadInfo();
@@ -96,10 +96,7 @@ import serviceAccountAuth from '../helpers/authService.js';
                       if (!acc[row.Department][row.Date]) {
                         acc[row.Department][row.Date] = 0;
                       }
-                      if(isNaN(row.Present)){
-                        console.log("this is not a number ",row.Present);
-                        return acc;
-                       }
+                      
                       acc[row.Department][row.Date] += 1;
                     }
                     return acc;
