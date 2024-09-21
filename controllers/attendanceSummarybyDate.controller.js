@@ -14,7 +14,7 @@ export async function AttendanceSummaryByDate(req,res){
         return res.status(400).json({ error: 'Sheet IDs for attendance are required' });
         }
 
-        const cacheKey = `AttendanceSummaryByDate:${attendanceSheet}`;
+        const cacheKey = `AttendanceSummaryByDate:${attendanceSheet}:${date}`;
 
 
         try{
@@ -68,12 +68,13 @@ const attendanceDataByDate=extractedData.filter(row=>row.Date===date);
   }, {});
   
   console.log("groupedData finally ",groupedData);
-  
+  if(Object.keys(groupedData).length!==0){
+
   await client.setEx(cacheKey,CACHE_EXPIRATION_SECONDS,JSON.stringify({
     AbsentsData:groupedData,
     Present:attendanceDataByDate.length-filteredData.length,
     Absent:filteredData.length
-  }));
+  }));}
 
 return res.json({
   AbsentsData:groupedData,
