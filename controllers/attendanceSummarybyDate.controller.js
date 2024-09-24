@@ -6,7 +6,7 @@ import filterValidSheets from "../helpers/filterValidSheets.js";
 import extractData from "../helpers/extractData.js";
 
 
-const CACHE_EXPIRATION_SECONDS = 7*24*60*60; // 7 days
+const CACHE_EXPIRATION_SECONDS = 1*24*60*60; // 1 day
 export async function AttendanceSummaryByDate(req,res){
     const {attendanceSheet,date } = req.query;
 
