@@ -83,9 +83,8 @@ else{
         }
         return acc;
       }, {});
-
     }
-  console.log("by date : ",attendanceCountByDate );
+ 
       const cleanedQuotationData = quotationData
         .filter(quotation => {
           const date = quotation.Date;
@@ -104,13 +103,13 @@ else{
         });
   
       const resultData = cleanedQuotationData
-        .filter(quotation => quotation.NoOfBoxes > 0 && quotation.NoOfPresents > 0)
+        .filter(quotation =>quotation.NoOfPresents > 0)
         .map(quotation => ({
           Date: quotation.Date,
           NoOfBoxes: quotation.NoOfBoxes,
           NoOfPresents: quotation.NoOfPresents
         }));
-  
+        console.log("unfiltered ",resultData);
       // Cache the result data in Redis
       await client.setEx(cacheKey, CACHE_EXPIRATION_SECONDS, JSON.stringify(resultData));
   
