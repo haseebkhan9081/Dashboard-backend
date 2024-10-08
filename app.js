@@ -21,7 +21,7 @@ import expensesRoute from "./routes/expenses.route.js"
 import StudentsvsboxesRoute from "./routes/Studentsvsboxes.route.js"
 import attendancePercentageIncreaseRoute from "./routes/attendancePercentageIncrease.route.js";
 import attendanceSummaryByDateRoute from "./routes/attendanceSummarybyDate.route.js"
-
+import redisRoute from "./routes/redis.route.js";
 import client from './helpers/redisClient.js';
 const CACHE_EXPIRATION_SECONDS = 10800; // 3 hours
 const app = express();
@@ -154,7 +154,7 @@ app.get('/api/sheet/worksheet/data', async (req, res) => {
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
-
+app.use("/api/redis",redisRoute);
 app.use("/api/analytics",StudentsvsboxesRoute);
 app.use("/api/analytics",expensesRoute);
 app.use("/api/analytics",mealCostRoute);  

@@ -104,7 +104,7 @@ export  async function AverageStudentVsBoxes (req, res){
   
         const results = {};
         for (const sheetTitle of latestThreeMonths) {
-          console.log(`Fetching data for quotation sheet: ${sheetTitle}`);
+      //    console.log(`Fetching data for quotation sheet: ${sheetTitle}`);
           const sheetDoc = quotationDoc.sheetsByIndex.find(sheet => cleanTitle(sheet.title).toLowerCase() === sheetTitle.toLowerCase());
   
           if (!sheetDoc) {
@@ -114,13 +114,13 @@ export  async function AverageStudentVsBoxes (req, res){
   
           const rows = await sheetDoc.getRows();
                  const extracteData=   await  extractData(sheetDoc,rows);
-          console.log("extractData  : ",extracteData);
+          // console.log("extractData  : ",extracteData);
           const data = extracteData.map(row => ({
             Date: row.Date,
             'No. Of Boxes': row['No. Of Boxes'],
           }));
   
-          console.log(`Data for quotation sheet ${sheetTitle}:`, data);
+      //    console.log(`Data for quotation sheet ${sheetTitle}:`, data);
           const filteredData = data.filter(row => {
             // Parse and validate the date
             const parsedDate = parse(row.Date, 'MM/dd/yyyy', new Date());
@@ -140,6 +140,7 @@ export  async function AverageStudentVsBoxes (req, res){
   const totalSum = filteredData.reduce((sum, row) => {
     const noOfBoxesStr = row['No. Of Boxes']?.replace(/,/g, '').trim();
     const noOfBoxes = parseFloat(noOfBoxesStr);
+    console.log("no of boxes :",noOfBoxes);
     return sum + (isNaN(noOfBoxes) ? 0 : noOfBoxes);
   }, 0);
   
@@ -155,7 +156,7 @@ export  async function AverageStudentVsBoxes (req, res){
             averageStudentsPresent: 0, // Placeholder for attendance data
           };
   
-          console.log(`Results for ${sheetTitle}:`, results[`${capitalizeFirstLetter(extractMonthAndYear(sheetTitle).month)} ${extractMonthAndYear(sheetTitle).year}`]);
+        //  console.log(`Results for ${sheetTitle}:`, results[`${capitalizeFirstLetter(extractMonthAndYear(sheetTitle).month)} ${extractMonthAndYear(sheetTitle).year}`]);
         }
   
         return results;
@@ -180,7 +181,7 @@ export  async function AverageStudentVsBoxes (req, res){
           const extracteData=   await  extractData(sheetDoc,rows);
            
   
-          console.log(`Data for attendance sheet ${sheetTitle}:`, extracteData.slice(0,3));
+         // console.log(`Data for attendance sheet ${sheetTitle}:`, extracteData.slice(0,3));
   
            
 
@@ -195,11 +196,11 @@ export  async function AverageStudentVsBoxes (req, res){
                    
             attendanceCountByDate = countStudentsPresent(extracteData);
         }
-          console.log("students present by date ",attendanceCountByDate);
+         // console.log("students present by date ",attendanceCountByDate);
   
           const calculateAverageAttendance = (attendanceCountByDate) => {
             // Log the initial attendance count by date
-            console.log("Attendance Count By Date:", attendanceCountByDate);
+           // console.log("Attendance Count By Date:", attendanceCountByDate);
           
             // Reduce to calculate total attendance and number of dates with positive attendance
             const { totalPresentStudents, daysWithAttendance } = Object.entries(attendanceCountByDate).reduce((acc, [date, count]) => {
@@ -211,8 +212,8 @@ export  async function AverageStudentVsBoxes (req, res){
               }
           
               // Log the accumulated values after each iteration
-              console.log(`Accumulated Total Present Students: ${acc.totalPresentStudents}`);
-              console.log(`Accumulated Days With Attendance: ${acc.daysWithAttendance}`);
+              // console.log(`Accumulated Total Present Students: ${acc.totalPresentStudents}`);
+              // console.log(`Accumulated Days With Attendance: ${acc.daysWithAttendance}`);
               
               return acc;
             }, { totalPresentStudents: 0, daysWithAttendance: 0 });
@@ -221,7 +222,7 @@ export  async function AverageStudentVsBoxes (req, res){
             const averageAttendance = daysWithAttendance > 0 ? totalPresentStudents / daysWithAttendance : 0;
           
             // Log the final calculated average
-            console.log("Final Average Attendance:", averageAttendance);
+         //   console.log("Final Average Attendance:", averageAttendance);
           
             return averageAttendance;
           };
@@ -241,7 +242,7 @@ export  async function AverageStudentVsBoxes (req, res){
             };
           }
   
-          console.log(`Results for ${sheetTitle}:`, results[key]);
+      //    console.log(`Results for ${sheetTitle}:`, results[key]);
         }
   
         return results;
@@ -253,8 +254,8 @@ export  async function AverageStudentVsBoxes (req, res){
        
 
       const attendanceResults = await processAttendanceSheets(attendanceDoc, sortedTitles.slice(0,3));
-      console.log("qu result", quotationResults);
-  console.log("att result", attendanceResults);
+      //console.log("qu result", quotationResults);
+     //console.log("att result", attendanceResults);
   
   // Initialize finalResults with an empty object
   const finalResults = {};
@@ -286,13 +287,13 @@ export  async function AverageStudentVsBoxes (req, res){
     }
   });
   
-  console.log("Returning results:", finalResults);
+ // console.log("Returning results:", finalResults);
   
       
       // Cache the result
       await client.setEx(cacheKey, CACHE_EXPIRATION_SECONDS, JSON.stringify(finalResults));
   
-      console.log("Returning results:", finalResults);
+      //console.log("Returning results:", finalResults);
   
       // Return the result
       res.json(finalResults);

@@ -24,10 +24,10 @@ import SumStudentsFromAllDepartments from '../helpers/SumStudentsFromAllDepartme
     try {
       // Check Redis cache first
       const cachedData = await client.get(cacheKey);
-      if (cachedData) {
+       if (cachedData) {
         console.log('Serving data from cache');
         return res.json(JSON.parse(cachedData));
-      } 
+      }
   
       const attendanceDoc = new GoogleSpreadsheet(attendanceSheet, serviceAccountAuth);
       await attendanceDoc.loadInfo();
@@ -84,6 +84,8 @@ else{
         return acc;
       }, {});
     }
+
+     
  
       const cleanedQuotationData = quotationData
         .filter(quotation => {
@@ -102,6 +104,8 @@ else{
           };
         });
   
+ 
+
       const resultData = cleanedQuotationData
         .filter(quotation =>quotation.NoOfPresents > 0)
         .map(quotation => ({
