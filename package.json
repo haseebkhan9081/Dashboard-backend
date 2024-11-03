@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon index.js",
-    "build": "vercel build"
+    "build": "vercel build",
+     "postinstall": "prisma generate"
   },
   "keywords": [],
   "author": "",
