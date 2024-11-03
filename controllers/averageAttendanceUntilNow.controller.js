@@ -59,7 +59,7 @@ export async function AverageAttendanceUntilNow (req, res){
         const attendanceRows = await sheet.getRows();
         const attendanceData = extractData(sheet, attendanceRows);
      
-        let attendanceCountByDate;
+        let attendanceCountByDate=0;
         if(attendanceData.some(item => item.hasOwnProperty('Total') && item.hasOwnProperty('Present'))){
  
 

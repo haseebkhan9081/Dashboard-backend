@@ -14,6 +14,5 @@ if (process.env.NODE_ENV === 'production') {
   }
   prisma = global.prisma;
 }
-
 // Export the Prisma client instance
 export default prisma;

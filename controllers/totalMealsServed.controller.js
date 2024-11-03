@@ -25,8 +25,7 @@ import serviceAccountAuth from '../helpers/authService.js';
     const cacheKey = `totalMealsServed:${quotationSheet}`;
   
     try {
-      // Check Redis cache first
-      const cachedData = await client.get(cacheKey);
+       const cachedData = await client.get(cacheKey);
       if (cachedData) {
         console.log('Serving data from cache');
         return res.json(JSON.parse(cachedData));

@@ -12,3 +12,69 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+
+model Organization {
+  id          Int         @id @default(autoincrement())
+  name        String       @unique// Organization name (e.g., 'Institute A')
+  departments Department[]  // Each organization can have multiple departments
+  employees   Employee[]    // Employees associated with the organization
+  meals       Meal[]        // Meals served by the organization
+  attendance  Attendance[]  // Attendance records linked to the organization
+}
+
+model Department {
+  id             Int          @id @default(autoincrement())
+  name           String       // Department name (e.g., 'Main Library')
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  employees      Employee[]   // Employees belonging to the department
+  attendance     Attendance[] // Attendance records for this department
+}
+
+model Employee {
+  id             Int          @id @default(autoincrement())
+  acNumber       Int          // Employee AC-No (attendance code from the Excel sheet)
+  name           String       // Employee name (from the Excel sheet)
+  departmentId   Int
+  department     Department   @relation(fields: [departmentId], references: [id])
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  attendance     Attendance[] // Attendance records for the employee
+}
+
+model Attendance {
+  id             Int          @id @default(autoincrement())
+  date           DateTime     // Date of attendance (from Excel sheet)
+  time           DateTime?    // Optional time of attendance (from Excel sheet)
+  employeeId     Int          // Employee who attended
+  employee       Employee     @relation(fields: [employeeId], references: [id])
+  departmentId   Int
+  department     Department   @relation(fields: [departmentId], references: [id])
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id])
+}
+
+model Meal {
+  id             Int          @id @default(autoincrement())
+  date           DateTime     @unique// Date of the meal (from Excel sheet)
+  day            String       // Day of the week (from Excel sheet)
+  mealName       String?      // Optional meal name (from Excel sheet)
+  noOfBoxes      Int?       // Number of boxes served (from Excel sheet)
+  cost     Float?        // Cost for 200 meals (from Excel sheet)
+  paidStatus     String?      // 'Paid' or 'Not Paid' status (from Excel sheet)
+  mealDetails    MealDetail[]
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id])
+}
+
+model MealDetail{
+  id              Int          @id @default(autoincrement())
+mealName String
+price    Float
+quantity  Int
+total Float?
+mealId  Int
+Meal   Meal  @relation(fields: [mealId],references: [id])
+
+}

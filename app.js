@@ -22,7 +22,11 @@ import StudentsvsboxesRoute from "./routes/Studentsvsboxes.route.js"
 import attendancePercentageIncreaseRoute from "./routes/attendancePercentageIncrease.route.js";
 import attendanceSummaryByDateRoute from "./routes/attendanceSummarybyDate.route.js"
 import redisRoute from "./routes/redis.route.js";
+import mealSheetRoute from "./routes/mealSheet.router.js"
+import mealDetailRoute from "./routes/mealDetail.route.js"
+import mealRoute from "./routes/meal.route.js"
 import client from './helpers/redisClient.js';
+import { isValidsheet } from './helpers/isValidSheet.js';
 const CACHE_EXPIRATION_SECONDS = 10800; // 3 hours
 const app = express();
 const port = process.env.PORT || 3000;
@@ -90,7 +94,7 @@ app.get('/api/sheets', async (req, res) => {
 // Endpoint to fetch worksheet titles from a spreadsheet
 app.get('/api/sheet/worksheets', async (req, res) => {
   const { sheetId } = req.query;
-
+console.log("hit")
   if (!sheetId) {
     return res.status(400).json({ error: 'Sheet ID is required' });
   }
@@ -102,11 +106,12 @@ app.get('/api/sheet/worksheets', async (req, res) => {
     await doc.loadInfo();
 
     // Get the list of sheet titles
-    const sheetTitles = doc.sheetsByIndex.map(sheet => ({
+    let sheetTitles = doc.sheetsByIndex.map(sheet => ({
       label: sheet.title,
       value: sheet.sheetId,
     }));
-
+     sheetTitles=sheetTitles.filter((title)=>isValidsheet(title.label))
+     console.log(sheetTitles);
     res.json(sheetTitles);
   } catch (error) {
     console.error('Error accessing Google Sheets:', error);
@@ -154,6 +159,9 @@ app.get('/api/sheet/worksheet/data', async (req, res) => {
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
+app.use("/api/meal",mealRoute);
+app.use("/api/MealSheet",mealSheetRoute)
+app.use("/api/mealDetail",mealDetailRoute);
 app.use("/api/redis",redisRoute);
 app.use("/api/analytics",StudentsvsboxesRoute);
 app.use("/api/analytics",expensesRoute);

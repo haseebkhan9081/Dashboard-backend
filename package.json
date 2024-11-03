@@ -12,6 +12,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@headlessui/react": "^2.1.10",
     "@prisma/client": "^5.20.0",
     "body-parser": "^1.20.2",
     "cors": "^2.8.5",
@@ -23,7 +24,8 @@
     "ioredis": "^5.4.1",
     "nodemon": "^3.1.4",
     "redis": "^4.7.0",
-    "serverless-http": "^3.2.0"
+    "serverless-http": "^3.2.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "prisma": "^5.20.0"

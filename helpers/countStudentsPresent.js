@@ -1,6 +1,9 @@
 import { isValid, parse } from "date-fns";
 
 const countStudentsPresent = (data) => {
+  if(data==undefined){
+    return 0
+  }
     return data.reduce((acc, attendance) => {
       const date = attendance.Date;
       const parsedDate = parse(date, 'MM/dd/yyyy', new Date());

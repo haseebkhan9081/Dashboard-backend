@@ -85,7 +85,7 @@ else{
       }, {});
     }
 
-     
+     console.log("count by date",attendanceCountByDate)
  
       const cleanedQuotationData = quotationData
         .filter(quotation => {
