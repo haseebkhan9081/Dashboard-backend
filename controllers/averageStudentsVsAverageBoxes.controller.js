@@ -28,11 +28,11 @@ export  async function AverageStudentVsBoxes (req, res){
     try {
       // Check if result is cached
       const cachedResult = await client.get(cacheKey);
-      // if (cachedResult) {
-      //   console.log("Serving data from cache");
-      //   console.log(cachedResult);
-      //   return res.json(JSON.parse(cachedResult));
-      // }
+      if (cachedResult) {
+        console.log("Serving data from cache");
+        console.log(cachedResult);
+        return res.json(JSON.parse(cachedResult));
+      }
       function capitalizeFirstLetter(str) {
         return str.charAt(0).toUpperCase() + str.slice(1);
       }
