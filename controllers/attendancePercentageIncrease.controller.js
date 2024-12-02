@@ -11,7 +11,7 @@ import averageAttendancePerMonth from '../helpers/averageAttendancePerMonth.js';
     const CACHE_EXPIRATION_SECONDS = 6*24*60*60; // 6 days
     import serviceAccountAuth from '../helpers/authService.js';
     export async function AttendancePercentageIncrease (req,res){
-        const {attendanceSheet } = req.query;
+        const {attendanceSheet} = req.query;
     
         if (!attendanceSheet) {
         return res.status(400).json({ error: 'Sheet IDs for attendance are required' });

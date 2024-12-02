@@ -67,7 +67,7 @@ import SumStudentsFromAllDepartments from '../helpers/SumStudentsFromAllDepartme
       const attendanceData = extractData(attendanceSheetDoc, attendanceRows);
       const quotationData = extractData(quotationSheetDoc, quotationRows);
   let attendanceCountByDate;
-      if(attendanceData.some(item => item.hasOwnProperty('Total') && item.hasOwnProperty('Present'))){
+        if(attendanceData.some(item => item.hasOwnProperty('Total') && item.hasOwnProperty('Present'))){
 attendanceCountByDate=SumStudentsFromAllDepartments(attendanceData);
 
       }

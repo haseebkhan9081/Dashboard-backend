@@ -27,6 +27,7 @@ import mealDetailRoute from "./routes/mealDetail.route.js"
 import mealRoute from "./routes/meal.route.js"
 import client from './helpers/redisClient.js';
 import { isValidsheet } from './helpers/isValidSheet.js';
+import TeachersAverageTimeRoute from './routes/TeachersAverageTime.route.js'
 const CACHE_EXPIRATION_SECONDS = 10800; // 3 hours
 const app = express();
 const port = process.env.PORT || 3000;
@@ -164,6 +165,7 @@ app.use("/api/MealSheet",mealSheetRoute)
 app.use("/api/mealDetail",mealDetailRoute);
 app.use("/api/redis",redisRoute);
 app.use("/api/analytics",StudentsvsboxesRoute);
+app.use("/api/analytics",TeachersAverageTimeRoute);
 app.use("/api/analytics",expensesRoute);
 app.use("/api/analytics",mealCostRoute);  
 app.use("/api/analytics",studentAveragePerClassRoute);   
