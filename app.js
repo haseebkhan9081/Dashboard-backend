@@ -25,7 +25,6 @@ import redisRoute from "./routes/redis.route.js";
 import mealSheetRoute from "./routes/mealSheet.router.js"
 import mealDetailRoute from "./routes/mealDetail.route.js"
 import mealRoute from "./routes/meal.route.js"
-//@ts-ignore
 import TeachersAttendanceSummaryRoute from "./routes/TeachersAttendanceSummary.route.js"
 import client from './helpers/redisClient.js';
 import { isValidsheet } from './helpers/isValidSheet.js';
