@@ -1,6 +1,5 @@
 export const redisConfig = {
-    host: 'redis-10478.c52.us-east-1-4.ec2.redns.redis-cloud.com',
-    port: 10478,
-    password: 'skLWFQSklPbujEyoOOxvnOBEb4k8U5R5'
-  };
-  
+  host: "redis-10981.c8.us-east-1-3.ec2.redns.redis-cloud.com",
+  port: 10981,
+  password: "YJpIpTX9zoIXM62jXSyol0ahgumvIETM",
+};

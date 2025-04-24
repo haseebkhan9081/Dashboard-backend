@@ -8,7 +8,7 @@ import { createClient } from 'redis';
 dotenv.config();
 import client from '../helpers/redisClient.js';
 import serviceAccountAuth from '../helpers/authService.js';
-const CACHE_EXPIRATION_SECONDS = 7*24*60*60; // 7 days
+const CACHE_EXPIRATION_SECONDS = 30*24*60*60; // 7 days
  
 
 

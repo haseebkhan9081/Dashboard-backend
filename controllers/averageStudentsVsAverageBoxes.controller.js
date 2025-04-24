@@ -99,7 +99,7 @@ export  async function AverageStudentVsBoxes (req, res){
   
         console.log("Sorted sheet titles:", sortedSheetTitles);
   
-        const latestThreeMonths = sortedSheetTitles.slice(0, 3);
+        const latestThreeMonths = sortedSheetTitles.slice(0,3);
   
         console.log("Latest three months:", latestThreeMonths);
   
@@ -294,7 +294,7 @@ export  async function AverageStudentVsBoxes (req, res){
       // Cache the result
       await client.setEx(cacheKey, CACHE_EXPIRATION_SECONDS, JSON.stringify(finalResults));
   
-      //console.log("Returning results:", finalResults);
+      console.log("Returning results:", finalResults);
   
       // Return the result
       res.json(finalResults);
