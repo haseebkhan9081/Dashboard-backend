@@ -42,7 +42,8 @@ const app = express();
 const port = process.env.PORT || 3000;
 const allowedOrigins = [
   process.env.SERVER_URL, // First origin from environment variable
-  process.env.NOURISHED_SERVER  // Second origin from environment variable
+  process.env.NOURISHED_SERVER , // Second origin from environment variable
+  process.env.Nourished_management_Suite_FrontEnd
 ]
 
 
