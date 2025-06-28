@@ -4,9 +4,9 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "dev": "nodemon index.js",
+    "dev": "nodemon index.js ",
     "build": "vercel build",
-     "postinstall": "prisma generate"
+    "postinstall": "prisma generate"
   },
   "keywords": [],
   "author": "",
@@ -18,12 +18,13 @@
     "body-parser": "^1.20.2",
     "cors": "^2.8.5",
     "date-fns": "^3.6.0",
-    "dotenv": "^16.4.5",
+    "dotenv": "^16.6.1",
     "express": "^4.19.2",
     "google-spreadsheet": "^4.1.2",
     "googleapis": "^140.0.1",
     "ioredis": "^5.4.1",
     "nodemon": "^3.1.4",
+    "pg": "^8.16.3",
     "redis": "^4.7.0",
     "serverless-http": "^3.2.0",
     "xlsx": "^0.18.5"

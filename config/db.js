@@ -1,18 +1,19 @@
-// db.js
-import { PrismaClient } from '@prisma/client';
+import 'dotenv/config'; // auto-loads .env
+import pkg from 'pg';
+const { Pool } = pkg;
 
-// Check if there is already an instance of PrismaClient
-let prisma;
-
-if (process.env.NODE_ENV === 'production') {
-  // In production, create a new instance every time
-  prisma = new PrismaClient();
-} else {
-  // In development, use a global variable to store the client across modules
-  if (!global.prisma) {
-    global.prisma = new PrismaClient();
+const pool = new Pool({
+  user: process.env.PG_USER,
+  password: process.env.PG_PASSWORD,
+  host: process.env.PG_HOST,
+  port: parseInt(process.env.PG_PORT),
+  database: process.env.PG_DATABASE,
+  ssl: {
+    rejectUnauthorized: true,
+    ca: process.env.PG_SSL_CA.replace(/\\n/g, '\n') // Restore newlines
   }
-  prisma = global.prisma;
-}
-// Export the Prisma client instance
-export default prisma;
+}); 
+
+
+
+export default pool;

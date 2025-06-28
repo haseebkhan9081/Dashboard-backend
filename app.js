@@ -29,6 +29,14 @@ import TeachersAttendanceSummaryRoute from "./routes/TeachersAttendanceSummary.r
 import client from './helpers/redisClient.js';
 import { isValidsheet } from './helpers/isValidSheet.js';
 import TeachersAverageTimeRoute from './routes/TeachersAverageTime.route.js'
+import roleRoutes from "./routes/roleRoutes.js"
+import mealsRoutes from './routes/meals.js'
+import mealItemRoutes from './routes/mealItemRoutes.js'
+import initDB from './scripts/setupDB.js';
+import attendanceRoutes from './routes/attendanceRoutes.js';
+import userRoutes from './routes/userRoutes.js'
+import studentRoutes from "./routes/studentRoutes.js";
+
 const CACHE_EXPIRATION_SECONDS = 10800; // 3 hours
 const app = express();
 const port = process.env.PORT || 3000;
@@ -36,6 +44,10 @@ const allowedOrigins = [
   process.env.SERVER_URL, // First origin from environment variable
   process.env.NOURISHED_SERVER  // Second origin from environment variable
 ]
+
+
+
+
 
 const corsOptions = {
   origin: function (origin, callback) {
@@ -49,7 +61,21 @@ const corsOptions = {
 app.use(cors()); // Allows all origins
 app.use(bodyParser.json());
 
+import pool from "./config/db.js"
+
+try {
+  const res = await pool.query("SELECT NOW()")
+  console.log("✅ Connected to PostgreSQL at:", res.rows[0].now)
+} catch (err) {
+  console.error("❌ Connection failed:", err)
+}
+
+
+
 // Initialize auth for Google Sheets
+
+
+
 const serviceAccountAuth = new JWT({
   email: process.env.GOOGLE_CLIENT_EMAIL,
   key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'), // Ensure new lines are preserved
@@ -179,5 +205,26 @@ app.use("/api/analytics",attendancePercentageIncreaseRoute);
 app.use("/api/analytics",attendanceSummaryByDateRoute);
 app.use("/api/analytics", TeachersAttendanceSummaryRoute);
 
-  
+//the new setup
+app.use("/api", roleRoutes) 
+app.use('/api/meals', mealsRoutes)
+app.use('/api/meal-items', mealItemRoutes)
+import schoolRoutes from './routes/schoolRoutes.js'
+
+app.use('/api', schoolRoutes)
+
+
+app.use('/api', userRoutes)
+import accessRoutes from './routes/accessRoutes.js'
+import importExcelRoutes from "./routes/importExcelRoutes.js"
+app.use('/api/access', accessRoutes)
+app.use('/api/attendance', attendanceRoutes);
+app.use("/api/students", studentRoutes);
+app.use("/api/import-excel", importExcelRoutes)
+import billingRoutes from "./routes/billingRoutes.js"
+app.use("/api/billing", billingRoutes)
+import expensesRoutes from "./routes/expensesRoutes.js"
+app.use("/api/expenses", expensesRoutes)
+
+
 export default app;

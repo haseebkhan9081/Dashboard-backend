@@ -109,7 +109,7 @@ import serviceAccountAuth from '../helpers/authService.js';
   
       // Cache the result
       const formattedLatestDate = latestDate ? format(latestDate, 'MMMM/dd/yyyy', { locale: enUS }) : null;
-      
+      console.log("total meals served :",totalMealsServed);
       await client.setEx(cacheKey, CACHE_EXPIRATION_SECONDS, JSON.stringify({ totalMealsServed, formattedLatestDate }));
       // Return the result
       console.log({ totalMealsServed, formattedLatestDate });
