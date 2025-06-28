@@ -32,7 +32,7 @@ import TeachersAverageTimeRoute from './routes/TeachersAverageTime.route.js'
 import roleRoutes from "./routes/roleRoutes.js"
 import mealsRoutes from './routes/meals.js'
 import mealItemRoutes from './routes/mealItemRoutes.js'
-import initDB from './scripts/setupDB.js';
+
 import attendanceRoutes from './routes/attendanceRoutes.js';
 import userRoutes from './routes/userRoutes.js'
 import studentRoutes from "./routes/studentRoutes.js";
